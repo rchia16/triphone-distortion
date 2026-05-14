@@ -1,6 +1,6 @@
-# Intuition Guide (Low Cognitive Load)
+# Intuition Guide
 
-This is a simple mental model for two scripts:
+This is the intuition for the two scripts:
 
 - `deep_phone_candidate_stack_blabber_triphone.py`
 - `my_test.py`
@@ -38,7 +38,7 @@ So this script builds the **candidate library** and describes how distorted each
 
 ## 2) What `my_test.py` does
 
-Think of this script as a **controller**:
+Think of this script as the template compare and asset selection **controller**:
 
 1. Compare EEG sample vs template.
 2. Turn mismatch into a target distortion strength.
