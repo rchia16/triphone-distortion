@@ -55,6 +55,12 @@ from pathlib import Path
 from typing import Any
 
 
+PHONE_DISTANCE_MAX_TARGET = 0.55
+DEFAULT_LEVEL_TOLERANCE = 0.25
+DEFAULT_DISTANCE_TOLERANCE = 0.20
+DEFAULT_CANONICAL_PENALTY_START = 0.35
+
+
 VOICE_ALIASES = {
     "female": "woman",
     "woman": "woman",
@@ -197,6 +203,24 @@ def overlap_recall(query: set[str], candidate: set[str]) -> float:
     return len(query & candidate) / max(1, len(query))
 
 
+def asset_level(asset: dict[str, Any]) -> float | None:
+    level = asset.get("distortion_level", asset.get("morph_level", asset.get("level")))
+    if level is None:
+        return None
+    try:
+        return float(level)
+    except Exception:
+        return None
+
+
+def asset_is_ground_truth(asset: dict[str, Any]) -> bool:
+    if asset.get("is_ground_truth") is True:
+        return True
+    phones = list(asset.get("phones") or [])
+    canonical = list(asset.get("canonical_phones") or [])
+    return bool(phones and canonical and phones == canonical)
+
+
 def normalize_asset_from_candidate(c: dict[str, Any], canonical_phones: list[str] | None, idx: int) -> dict[str, Any]:
     phones = list(c.get("phones") or [])
     canonical = list(canonical_phones or c.get("canonical_phones") or [])
@@ -292,6 +316,7 @@ def asset_score(
     target_level: float | None,
     level_weight: float,
     global_search: bool = False,
+    feedback_mode: str = "canonical",
 ) -> tuple[float, dict[str, float]]:
     score = 0.0
     details: dict[str, float] = {}
@@ -331,7 +356,9 @@ def asset_score(
     inv_j = jaccard(query_inventory, asset_inventory)
     details["phone_inventory_jaccard"] = inv_j
 
-    if global_search:
+    if global_search and feedback_mode == "distance_targeted":
+        score += 0.15 * tri_recall + 0.05 * bi_recall + 0.05 * inv_j
+    elif global_search:
         # In global temporal search, the canonical phone sequence is a word
         # constraint. The requested temporal distance should choose the level.
         score += 0.25 * exact_phone + 0.75 * tri_recall + 0.25 * bi_recall + 0.25 * inv_j
@@ -344,25 +371,61 @@ def asset_score(
     suitability = asset.get("suitability_score")
     if suitability is not None:
         details["suitability_score"] = float(suitability)
-        score += (0.75 if global_search else 1.25) * float(suitability)
+        score += (0.65 if global_search and feedback_mode == "distance_targeted" else 0.75 if global_search else 1.25) * float(suitability)
 
     neural_similarity = asset.get("neural_similarity")
     if neural_similarity is not None:
         details["neural_similarity"] = float(neural_similarity)
-        score += (0.25 if global_search else 0.5) * float(neural_similarity)
+        score += (0.20 if global_search and feedback_mode == "distance_targeted" else 0.25 if global_search else 0.5) * float(neural_similarity)
 
     phone_similarity = asset.get("phone_similarity")
     if phone_similarity is not None:
         details["phone_similarity"] = float(phone_similarity)
-        score += (0.25 if global_search else 0.5) * float(phone_similarity)
+        score += (0.10 if global_search and feedback_mode == "distance_targeted" else 0.25 if global_search else 0.5) * float(phone_similarity)
 
     if target_level is not None:
-        level = asset.get("distortion_level", asset.get("morph_level", asset.get("level")))
+        level = asset_level(asset)
         if level is not None:
             level_error = abs(float(level) - clamp_unit(target_level))
             level_score = max(0.0, 1.0 - level_error)
             details["level_score"] = level_score
             score += float(level_weight) * level_score
+
+    if global_search and feedback_mode == "distance_targeted" and target_level is not None:
+        target_strength = clamp_unit(target_level)
+        desired_phone_distance = target_strength * PHONE_DISTANCE_MAX_TARGET
+        details["target_strength"] = target_strength
+        details["desired_phone_distance"] = desired_phone_distance
+
+        phone_distance = asset.get("phone_distance")
+        if phone_distance is not None:
+            distance_error = abs(float(phone_distance) - desired_phone_distance)
+            distance_match = max(0.0, 1.0 - distance_error / DEFAULT_DISTANCE_TOLERANCE)
+            details["distance_match"] = distance_match
+            score += 3.5 * distance_match
+            details["phone_distance"] = float(phone_distance)
+
+        level = asset_level(asset)
+        if level is not None:
+            level_error = abs(float(level) - target_strength)
+            strict_level_match = max(0.0, 1.0 - level_error / DEFAULT_LEVEL_TOLERANCE)
+            details["strict_level_match"] = strict_level_match
+            score += 2.5 * strict_level_match
+
+        is_ground_truth = asset_is_ground_truth(asset)
+        details["is_ground_truth"] = 1.0 if is_ground_truth else 0.0
+        if not is_ground_truth:
+            augmentation_bonus = target_strength
+            details["augmentation_bonus"] = augmentation_bonus
+            score += 1.5 * augmentation_bonus
+        else:
+            canonical_penalty = 0.0
+            if target_strength > DEFAULT_CANONICAL_PENALTY_START:
+                canonical_penalty = (target_strength - DEFAULT_CANONICAL_PENALTY_START) / (
+                    1.0 - DEFAULT_CANONICAL_PENALTY_START
+                )
+            details["canonical_penalty"] = canonical_penalty
+            score -= 3.0 * canonical_penalty
 
     details["total"] = score
     return score, details
@@ -381,6 +444,7 @@ def select_assets(
     top_k: int,
     level_weight: float,
     global_search: bool = False,
+    feedback_mode: str = "canonical",
 ) -> list[dict[str, Any]]:
     query_phone_key = phone_sequence_key(phones) if phones else None
 
@@ -412,6 +476,7 @@ def select_assets(
             target_level=target_level,
             level_weight=level_weight,
             global_search=global_search,
+            feedback_mode=feedback_mode,
         )
 
         if score <= -1e8:
@@ -447,6 +512,12 @@ def main() -> None:
     p.add_argument("--top-k", type=int, default=5)
     p.add_argument("--level-weight", type=float, default=None)
     p.add_argument(
+        "--feedback-mode",
+        choices=["canonical", "distance_targeted"],
+        default="canonical",
+        help="Use distance_targeted for EEG feedback control where augmentation strength should track target level.",
+    )
+    p.add_argument(
         "--global-search",
         action="store_true",
         help="Treat --target-level as the primary whole-word temporal-distance selector.",
@@ -474,6 +545,7 @@ def main() -> None:
         top_k=args.top_k,
         level_weight=level_weight,
         global_search=args.global_search,
+        feedback_mode=args.feedback_mode,
     )
 
     result = {
@@ -488,6 +560,7 @@ def main() -> None:
             "min_level": args.min_level,
             "max_level": args.max_level,
             "global_search": args.global_search,
+            "feedback_mode": args.feedback_mode,
             "level_weight": level_weight,
         },
         "result_count": len(selected),
