@@ -26,7 +26,13 @@ Search strategy, similar to global phoneme augmentation lookup:
   4. Score biphone overlap.
   5. Score loose phone inventory overlap.
   6. Add suitability/neural/phone similarity bonuses.
-  7. Return top-k assets.
+  7. Threshold small distances to ground truth
+  8. Return top-k assets.
+
+Ground-truth override:
+    Use --ground-truth-override below-threshold with
+    --min-augmentation-phone-distance to return the ground-truth asset when
+    the best augmentation does not meet the minimum required distance
 
 Examples:
 
@@ -44,6 +50,12 @@ Examples:
     --word no \
     --phones N OW \
     --max-level 0.1
+
+  python select_blabber_asset_triphone.py no_blabber_triphone_rule_only.json \
+    --word no \
+    --phones N AR ER \
+    --ground-truth-override below-threshold \
+    --min-augmentation-phone-distance 0.1
 """
 
 from __future__ import annotations
@@ -59,6 +71,8 @@ PHONE_DISTANCE_MAX_TARGET = 0.55
 DEFAULT_LEVEL_TOLERANCE = 0.25
 DEFAULT_DISTANCE_TOLERANCE = 0.20
 DEFAULT_CANONICAL_PENALTY_START = 0.35
+DEFAULT_MIN_AUG_PHONE_DISTANCE = 0.0
+DEFAULT_GT_LEVEL_TOL = 0.1
 
 
 VOICE_ALIASES = {
@@ -220,6 +234,151 @@ def asset_is_ground_truth(asset: dict[str, Any]) -> bool:
     canonical = list(asset.get("canonical_phones") or [])
     return bool(phones and canonical and phones == canonical)
 
+def asset_level(asset: dict[str, Any]) -> float | None:
+    level = asset.get("distortion_level", asset.get("morph_level", asset.get("level")))
+    if level is None:
+        return None
+    try:
+        return float(level)
+    except Exception:
+        return None
+
+
+def asset_is_ground_truth(asset: dict[str, Any]) -> bool:
+    if asset.get("is_ground_truth") is True:
+        return True
+    if asset.get("asset_role") == "ground_truth":
+        return True
+    phones = list(asset.get("phones") or [])
+    canonical = list(asset.get("canonical_phones") or [])
+    return bool(phones and canonical and phones == canonical)
+
+
+def asset_phone_distance(asset: dict[str, Any]) -> float | None:
+    value = asset.get("phone_distance")
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def asset_word_matches(asset: dict[str, Any], word: str | None) -> bool:
+    if word is None:
+        return True
+    return asset.get("word") == word or asset.get("target_word") == word
+
+
+def asset_voice_matches(asset: dict[str, Any], voice: str | None) -> bool:
+    if voice is None:
+        return True
+    return str(asset.get("voice")) == str(voice)
+
+
+def find_ground_truth_asset(
+    assets: list[dict[str, Any]],
+    *,
+    word: str | None,
+    voice: str | None,
+    target_level: float | None,
+    level_tolerance: float,
+) -> dict[str, Any] | None:
+    candidates = [
+        a for a in assets
+        if asset_is_ground_truth(a)
+        and asset_word_matches(a, word)
+        and asset_voice_matches(a, voice)
+    ]
+
+    if not candidates:
+        return None
+
+    if target_level is None:
+        return candidates[0]
+
+    target = float(target_level)
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for asset in candidates:
+        level = asset_level(asset)
+        if level is None:
+            level_error = 0.0
+        else:
+            level_error = abs(level - target)
+        if level_error <= level_tolerance:
+            scored.append((level_error, asset))
+
+    if scored:
+        scored.sort(key=lambda x: x[0])
+        return scored[0][1]
+
+    candidates.sort(key=lambda a: abs((asset_level(a) or 0.0) - target))
+    return candidates[0]
+
+
+def maybe_apply_ground_truth_override(
+    ranked: list[dict[str, Any]],
+    assets: list[dict[str, Any]],
+    *,
+    word: str | None,
+    voice: str | None,
+    target_level: float | None,
+    ground_truth_override: str,
+    min_augmentation_phone_distance: float,
+    ground_truth_level_tolerance: float,
+) -> list[dict[str, Any]]:
+    if ground_truth_override == "off" or not ranked:
+        return ranked
+
+    if ground_truth_override != "below-threshold":
+        raise ValueError(f"Unsupported ground truth override mode: {ground_truth_override}")
+
+    best = ranked[0]
+    best_asset = best["asset"]
+
+    if asset_is_ground_truth(best_asset):
+        return ranked
+
+    distance = asset_phone_distance(best_asset)
+    if distance is None or distance >= min_augmentation_phone_distance:
+        return ranked
+
+    fallback_level = target_level
+    if fallback_level is None:
+        fallback_level = asset_level(best_asset)
+
+    ground_truth = find_ground_truth_asset(
+        assets,
+        word=word,
+        voice=voice,
+        target_level=fallback_level,
+        level_tolerance=ground_truth_level_tolerance,
+    )
+    if ground_truth is None:
+        return ranked
+
+    override = {
+        "score": best["score"],
+        "score_details": {
+            **best.get("score_details", {}),
+            "ground_truth_override_applied": 1.0,
+            "override_reason": "below_min_augmentation_phone_distance",
+            "selected_augmentation_phone_distance": distance,
+            "min_augmentation_phone_distance": min_augmentation_phone_distance,
+            "replaced_asset_id": best_asset.get("asset_id"),
+        },
+        "asset": ground_truth,
+    }
+
+    replacement_id = ground_truth.get("asset_id")
+    remainder = [
+        item for item in ranked
+        if item["asset"].get("asset_id") != replacement_id
+    ]
+
+    return [override] + remainder
+
+
 
 def normalize_asset_from_candidate(c: dict[str, Any], canonical_phones: list[str] | None, idx: int) -> dict[str, Any]:
     phones = list(c.get("phones") or [])
@@ -315,6 +474,9 @@ def asset_score(
     query_inventory: set[str],
     target_level: float | None,
     level_weight: float,
+    ground_truth_override: str = "off",
+    min_augmentation_phone_distance: float = DEFAULT_MIN_AUG_PHONE_DISTANCE,
+    ground_truth_level_tolerance: float = DEFAULT_GT_LEVEL_TOL,
     global_search: bool = False,
     feedback_mode: str = "canonical",
 ) -> tuple[float, dict[str, float]]:
@@ -496,7 +658,17 @@ def select_assets(
             r["asset"].get("asset_id") or "",
         )
     )
-    return ranked[:top_k]
+    selected = ranked[:top_k]
+    return maybe_apply_ground_truth_override(
+        selected,
+        assets,
+        word=word,
+        voice=voice,
+        target_level=target_level,
+        ground_truth_override=ground_truth_override,
+        min_augmentation_phone_distance=min_augmentation_phone_distance,
+        ground_truth_level_tolerance=ground_truth_level_tolerance,
+    )
 
 
 def main() -> None:
@@ -512,15 +684,39 @@ def main() -> None:
     p.add_argument("--top-k", type=int, default=5)
     p.add_argument("--level-weight", type=float, default=None)
     p.add_argument(
+        "--ground-truth-override",
+        choices=["off", "below-threshold"],
+        default="off",
+        help="Return the same-word ground-truth asset when the best "\
+        "augmentation is below the configured distance threshold.",
+    )
+    p.add_argument(
+        "--min-augmentation-phone-distance",
+        type=float,
+        default=DEFAULT_MIN_AUG_PHONE_DISTANCE,
+        help="Minimum phone_distance required to accept an augmentation when "\
+        "--ground-truth-override below-threshold is enabled.",
+    )
+    p.add_argument(
+        "--ground-truth-level-tolerance",
+        type=float,
+        default=DEFAULT_GT_LEVEL_TOL,
+        help="Preferred level tolerance when choosing the ground-truth "\
+        "replacement asset.",
+    )
+
+    p.add_argument(
         "--feedback-mode",
         choices=["canonical", "distance_targeted"],
         default="canonical",
-        help="Use distance_targeted for EEG feedback control where augmentation strength should track target level.",
+        help="Use distance_targeted for EEG feedback control where " \
+        "augmentation strength should track target level.",
     )
     p.add_argument(
         "--global-search",
         action="store_true",
-        help="Treat --target-level as the primary whole-word temporal-distance selector.",
+        help="Treat --target-level as the primary whole-word " \
+        "temporal-distance selector.",
     )
     p.add_argument("--json-out", default=None)
     args = p.parse_args()
@@ -529,9 +725,15 @@ def main() -> None:
     triphones = parse_key_csv(args.triphones)
 
     if not phones and not triphones:
-        raise SystemExit("Provide --phones or --triphones for triphone-style selection.")
+        raise SystemExit(
+            "Provide --phones or --triphones for triphone-style selection."
+        )
 
-    level_weight = float(args.level_weight) if args.level_weight is not None else (6.0 if args.global_search else 0.75)
+    if args.level_weight is not None:
+        level_weight = float(args.level_weight)
+    else:
+        level_weight = 6.0 if args.global_search else 0.75
+
     assets, payload = load_assets(args.library_json)
     selected = select_assets(
         assets,
