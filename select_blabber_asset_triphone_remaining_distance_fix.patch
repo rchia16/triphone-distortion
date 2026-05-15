@@ -1,0 +1,80 @@
+--- select_blabber_asset_triphone.py
++++ select_blabber_asset_triphone.py
+@@
+-DEFAULT_MIN_AUG_PHONE_DISTANCE = 0.0
++DEFAULT_MIN_AUG_PHONE_DISTANCE = 0.12
+ DEFAULT_GT_LEVEL_TOL = 0.1
+@@
+-def asset_level(asset: dict[str, Any]) -> float | None:
+-    level = asset.get("distortion_level", asset.get("morph_level", asset.get("level")))
+-    if level is None:
+-        return None
+-    try:
+-        return float(level)
+-    except Exception:
+-        return None
+-
+-
+-def asset_is_ground_truth(asset: dict[str, Any]) -> bool:
+-    if asset.get("is_ground_truth") is True:
+-        return True
+-    phones = list(asset.get("phones") or [])
+-    canonical = list(asset.get("canonical_phones") or [])
+-    return bool(phones and canonical and phones == canonical)
+-
+ def asset_level(asset: dict[str, Any]) -> float | None:
+     level = asset.get("distortion_level", asset.get("morph_level", asset.get("level")))
+     if level is None:
+@@
+ def asset_voice_matches(asset: dict[str, Any], voice: str | None) -> bool:
+     if voice is None:
+         return True
+-    return str(asset.get("voice")) == str(voice)
++    return asset_voice_mode(asset) == normalize_voice_mode(voice)
+@@
+ def asset_score(
+     asset: dict[str, Any],
+     *,
+@@
+     target_level: float | None,
+     level_weight: float,
+-    ground_truth_override: str = "off",
+-    min_augmentation_phone_distance: float = DEFAULT_MIN_AUG_PHONE_DISTANCE,
+-    ground_truth_level_tolerance: float = DEFAULT_GT_LEVEL_TOL,
+     global_search: bool = False,
+     feedback_mode: str = "canonical",
+ ) -> tuple[float, dict[str, float]]:
+@@
+ def select_assets(
+     assets: list[dict[str, Any]],
+     *,
+@@
+     level_weight: float,
+     global_search: bool = False,
+     feedback_mode: str = "canonical",
++    ground_truth_override: str = "off",
++    min_augmentation_phone_distance: float = DEFAULT_MIN_AUG_PHONE_DISTANCE,
++    ground_truth_level_tolerance: float = DEFAULT_GT_LEVEL_TOL,
+ ) -> list[dict[str, Any]]:
+@@
+-        level = asset.get("morph_level", asset.get("level"))
++        level = asset_level(asset)
+         if min_level is not None and level is not None and float(level) < min_level:
+             continue
+         if max_level is not None and level is not None and float(level) > max_level:
+@@
+         level_weight=level_weight,
+         global_search=args.global_search,
+         feedback_mode=args.feedback_mode,
++        ground_truth_override=args.ground_truth_override,
++        min_augmentation_phone_distance=args.min_augmentation_phone_distance,
++        ground_truth_level_tolerance=args.ground_truth_level_tolerance,
+     )
+@@
+             "global_search": args.global_search,
+             "feedback_mode": args.feedback_mode,
+             "level_weight": level_weight,
++            "ground_truth_override": args.ground_truth_override,
++            "min_augmentation_phone_distance": args.min_augmentation_phone_distance,
++            "ground_truth_level_tolerance": args.ground_truth_level_tolerance,
+         },
