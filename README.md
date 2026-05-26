@@ -20,6 +20,12 @@ Output:
 - Metadata for search/ranking
 - Optional audio renderings
 
+TTS backends currently supported by the generator:
+- `piper`
+- `edge` via `edge-tts` plus `ffmpeg`
+- `kokoro`
+- `coqui`
+
 ### Level intuition
 - `level = 0` means very close to the original word.
 - `level = 1` means stronger distortion (more changed phones allowed).
@@ -117,3 +123,52 @@ Fast check:
 - If `temporal_match` is low for selected candidates, time-shape fit is weak.
 - If selected candidates are too strong despite low mismatch, deadband/weights are too aggressive.
 
+## 7) Edge TTS rendering
+
+Install:
+
+```bash
+pip install edge-tts
+```
+
+You also need `ffmpeg` on `PATH` because the generator converts Edge's MP3 output
+into the same WAV files used by the current scoring and library flow.
+
+Australian female:
+
+```bash
+python deep_phone_candidate_stack_blabber_triphone.py \
+  --tts-engine edge \
+  --edge-voice en-AU-NatashaNeural \
+  --word yes \
+  --levels 8 \
+  --render-audio \
+  --skip-neural \
+  --json-out yes_edge_au_female.json
+```
+
+Australian male:
+
+```bash
+python deep_phone_candidate_stack_blabber_triphone.py \
+  --tts-engine edge \
+  --edge-voice en-AU-WilliamNeural \
+  --word yes \
+  --levels 8 \
+  --render-audio \
+  --skip-neural \
+  --json-out yes_edge_au_male.json
+```
+
+Both voices in one library run:
+
+```bash
+python deep_phone_candidate_stack_blabber_triphone.py \
+  --tts-engine edge \
+  --edge-voices en-AU-NatashaNeural,en-AU-WilliamNeural \
+  --word yes \
+  --levels 8 \
+  --render-audio \
+  --skip-neural \
+  --json-out yes_edge_au_both.json
+```

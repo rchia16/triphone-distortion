@@ -9,6 +9,11 @@ PROCESSOR="${PROCESSOR:-deep_phone_candidate_stack_blabber_triphone.py}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-/data/raqchia/audio-assets/speech-assets-triphone}"
 LEVELS="${LEVELS:-8}"
 PIPER_LENGTH_SCALE="${PIPER_LENGTH_SCALE:-1.2}"
+TTS_ENGINE="${TTS_ENGINE:-piper}"
+EDGE_RATE="${EDGE_RATE:-+0%}"
+EDGE_PITCH="${EDGE_PITCH:-+0Hz}"
+EDGE_FEMALE_VOICE="${EDGE_FEMALE_VOICE:-en-AU-NatashaNeural}"
+EDGE_MALE_VOICE="${EDGE_MALE_VOICE:-en-AU-WilliamNeural}"
 
 WORDS=(go stop bath food yes no pain help)
 VOICES=(man woman)
@@ -31,6 +36,14 @@ config_for_voice() {
   esac
 }
 
+edge_voice_for() {
+  case "$1" in
+    woman) printf '%s\n' "$EDGE_FEMALE_VOICE" ;;
+    man) printf '%s\n' "$EDGE_MALE_VOICE" ;;
+    *) printf 'Unknown voice: %s\n' "$1" >&2; return 1 ;;
+  esac
+}
+
 reference_wav_for() {
   local voice="$1"
   local word="$2"
@@ -39,7 +52,7 @@ reference_wav_for() {
 
 preflight() {
   local missing=()
-  local voice word model config ref_wav
+  local voice word model config ref_wav edge_voice
 
   if ! "$PYTHON_BIN" --version >/dev/null 2>&1; then
     missing+=("python executable: $PYTHON_BIN")
@@ -47,17 +60,42 @@ preflight() {
 
   [[ -f "$PROCESSOR" ]] || missing+=("$PROCESSOR")
 
-  for voice in "${VOICES[@]}"; do
-    model="$(model_for_voice "$voice")"
-    config="$(config_for_voice "$voice")"
-    [[ -f "$model" ]] || missing+=("$model")
-    [[ -f "$config" ]] || missing+=("$config")
+  case "$TTS_ENGINE" in
+    piper)
+      for voice in "${VOICES[@]}"; do
+        model="$(model_for_voice "$voice")"
+        config="$(config_for_voice "$voice")"
+        [[ -f "$model" ]] || missing+=("$model")
+        [[ -f "$config" ]] || missing+=("$config")
 
-    for word in "${WORDS[@]}"; do
-      ref_wav="$(reference_wav_for "$voice" "$word")"
-      [[ -f "$ref_wav" ]] || missing+=("$ref_wav")
-    done
-  done
+        for word in "${WORDS[@]}"; do
+          ref_wav="$(reference_wav_for "$voice" "$word")"
+          [[ -f "$ref_wav" ]] || missing+=("$ref_wav")
+        done
+      done
+      ;;
+    edge)
+      if ! command -v ffmpeg >/dev/null 2>&1; then
+        missing+=("ffmpeg")
+      fi
+      if ! "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+import edge_tts
+PY
+      then
+        missing+=("python module: edge_tts")
+      fi
+      for voice in "${VOICES[@]}"; do
+        edge_voice="$(edge_voice_for "$voice")"
+        if [[ -z "$edge_voice" ]]; then
+          missing+=("edge voice for $voice")
+        fi
+      done
+      ;;
+    *)
+      printf 'Unknown TTS_ENGINE: %s\n' "$TTS_ENGINE" >&2
+      exit 1
+      ;;
+  esac
 
   if ((${#missing[@]} > 0)); then
     printf 'Missing required inputs; no processing was started:\n' >&2
@@ -69,30 +107,56 @@ preflight() {
 run_word_voice() {
   local voice="$1"
   local word="$2"
-  local model config ref_wav word_output_dir json_out
+  local model config ref_wav word_output_dir json_out edge_voice
 
-  model="$(model_for_voice "$voice")"
-  config="$(config_for_voice "$voice")"
-  ref_wav="$(reference_wav_for "$voice" "$word")"
   word_output_dir="$OUTPUT_ROOT/$voice/triphone/$word"
   json_out="$word_output_dir/${word}_blabber_scored.json"
 
   mkdir -p "$word_output_dir"
 
-  printf '\n[%s/%s] reference=%s\n' "$voice" "$word" "$ref_wav"
-  "$PYTHON_BIN" "$PROCESSOR" \
-    --word "$word" \
-    --levels "$LEVELS" \
-    --reference-wav "$ref_wav" \
-    --render-dir "$word_output_dir" \
-    --json-out "$json_out" \
-    --tts-engine piper \
-    --piper-model "$model" \
-    --piper-config "$config" \
-    --piper-length-scale "$PIPER_LENGTH_SCALE" \
-    --voice-mode "$voice" \
-    --piper-use-python-module \
-    "${extra_args[@]}"
+  case "$TTS_ENGINE" in
+    piper)
+      model="$(model_for_voice "$voice")"
+      config="$(config_for_voice "$voice")"
+      ref_wav="$(reference_wav_for "$voice" "$word")"
+
+      printf '\n[%s/%s] reference=%s\n' "$voice" "$word" "$ref_wav"
+      "$PYTHON_BIN" "$PROCESSOR" \
+        --word "$word" \
+        --levels "$LEVELS" \
+        --reference-wav "$ref_wav" \
+        --render-dir "$word_output_dir" \
+        --json-out "$json_out" \
+        --tts-engine piper \
+        --piper-model "$model" \
+        --piper-config "$config" \
+        --piper-length-scale "$PIPER_LENGTH_SCALE" \
+        --voice-mode "$voice" \
+        --piper-use-python-module \
+        "${extra_args[@]}"
+      ;;
+    edge)
+      edge_voice="$(edge_voice_for "$voice")"
+
+      printf '\n[%s/%s] edge-voice=%s\n' "$voice" "$word" "$edge_voice"
+      "$PYTHON_BIN" "$PROCESSOR" \
+        --word "$word" \
+        --levels "$LEVELS" \
+        --render-dir "$word_output_dir" \
+        --json-out "$json_out" \
+        --tts-engine edge \
+        --edge-voice "$edge_voice" \
+        --edge-rate "$EDGE_RATE" \
+        --edge-pitch "$EDGE_PITCH" \
+        --voice-mode "$voice" \
+        --render-audio \
+        "${extra_args[@]}"
+      ;;
+    *)
+      printf 'Unknown TTS_ENGINE: %s\n' "$TTS_ENGINE" >&2
+      exit 1
+      ;;
+  esac
 }
 
 main() {

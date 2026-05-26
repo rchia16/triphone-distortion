@@ -56,8 +56,8 @@ Core pipeline:
        triphone_keys:  ["<s>|N|AH", "N|AH|ER", "AH|ER|</s>"]
        biphone_keys:   ["<s>|N", "N|AH", "AH|ER", "ER|</s>"]
 
-  6. Optionally render audio with Piper, Kokoro, or Coqui.
-     Piper is the default and is recommended for batch pseudoword rendering.
+  6. Optionally render audio with Piper, Edge TTS, Kokoro, or Coqui.
+     Piper is the default and is recommended for local batch pseudoword rendering.
 
   7. Optionally score rendered candidates with torchaudio SSL/ASR embeddings.
      Default bundle:
@@ -131,6 +131,15 @@ Use the alternate Piper voice:
     --skip-neural \
     --render-audio
 
+Render with Australian Edge TTS:
+  python deep_phone_candidate_stack_blabber_triphone.py \
+    --word yes \
+    --levels 8 \
+    --tts-engine edge \
+    --edge-voice en-AU-NatashaNeural \
+    --skip-neural \
+    --render-audio
+
 Adjust articulation length:
   --piper-length-scale 1.05   near-ground-truth / natural
   --piper-length-scale 1.15   clear default range
@@ -148,6 +157,7 @@ Search generated assets with the triphone selector:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import itertools
 import json
@@ -217,6 +227,13 @@ PHONE_FEATURES: dict[str, dict[str, Any]] = {
 }
 
 VOWELS = {p for p, f in PHONE_FEATURES.items() if f["type"] == "vowel"}
+
+EDGE_TTS_VOICES = {
+    "female": "en-AU-NatashaNeural",
+    "woman": "en-AU-NatashaNeural",
+    "male": "en-AU-WilliamNeural",
+    "man": "en-AU-WilliamNeural",
+}
 
 VOWEL_VARIANTS: dict[str, list[tuple[str, float]]] = {
     "OW": [("OW", 0.00), ("UW", 0.25), ("AH", 0.35), ("AO", 0.40), ("ER", 0.55)],
@@ -478,6 +495,63 @@ def infer_piper_voice_mode(model_path: str | None) -> str | None:
     return None
 
 
+def infer_edge_voice_mode(voice_name: str | None) -> str | None:
+    voice = str(voice_name or "").strip().lower()
+    if not voice:
+        return None
+    if "natasha" in voice:
+        return "woman"
+    if "william" in voice:
+        return "man"
+    return None
+
+
+def infer_kokoro_voice_mode(voice_name: str | None) -> str | None:
+    voice = str(voice_name or "").strip().lower()
+    if voice.startswith("bf_"):
+        return "woman"
+    if voice.startswith("bm_"):
+        return "man"
+    return None
+
+
+def infer_voice_mode_from_voice_name(voice_name: str | None) -> str | None:
+    return (
+        infer_edge_voice_mode(voice_name)
+        or infer_kokoro_voice_mode(voice_name)
+        or gender_for_voice_mode(str(voice_name or "").strip().lower())
+    )
+
+
+def resolve_edge_voice_mode(args) -> str | None:
+    explicit = None if args.voice_mode == "auto" else args.voice_mode
+    if explicit is not None:
+        return explicit
+    if args.edge_voice:
+        return infer_edge_voice_mode(args.edge_voice)
+    edge_voices = [v.strip() for v in str(args.edge_voices or "").split(",") if v.strip()]
+    if len(edge_voices) > 1:
+        return None
+    if len(edge_voices) == 1:
+        return infer_edge_voice_mode(edge_voices[0])
+    return "woman" if args.edge_voice_mode in {"female", "woman"} else "man"
+
+
+def resolve_tts_voices(args) -> list[str]:
+    if args.tts_engine == "kokoro":
+        return [v.strip() for v in args.kokoro_voices.split(",") if v.strip()]
+    if args.tts_engine == "piper":
+        return [f"piper_speaker_{args.piper_speaker}" if args.piper_speaker is not None else "piper"]
+    if args.tts_engine == "edge":
+        edge_voices = [v.strip() for v in str(args.edge_voices or "").split(",") if v.strip()]
+        if edge_voices:
+            return edge_voices
+        if args.edge_voice:
+            return [args.edge_voice]
+        return [EDGE_TTS_VOICES[args.edge_voice_mode]]
+    return [args.coqui_speaker or "coqui"]
+
+
 def make_blabber_asset(
     c: "Candidate",
     canonical_phones: list[str],
@@ -508,7 +582,8 @@ def make_blabber_asset(
 
     is_ground_truth = phones == canonical
 
-    gender = gender_for_voice_mode(voice_mode)
+    effective_voice_mode = voice_mode or infer_voice_mode_from_voice_name(c.voice)
+    gender = gender_for_voice_mode(effective_voice_mode)
     return {
         "schema_version": BLABBER_SCHEMA_VERSION,
         "asset_id": asset_id,
@@ -551,7 +626,7 @@ def make_blabber_asset(
         "operations": list(c.operations),
 
         "voice": c.voice,
-        "voice_mode": voice_mode,
+        "voice_mode": effective_voice_mode,
         "gender": gender,
         "source_phonemes": canonical,
         "output_phonemes": phones,
@@ -963,6 +1038,68 @@ class PiperRenderer:
 
 
 # ---------------------------------------------------------------------
+# Edge TTS renderer
+# ---------------------------------------------------------------------
+
+class EdgeTTSRenderer:
+    def __init__(self, voice: str, rate: str = "+0%", pitch: str = "+0Hz"):
+        self.voice = voice
+        self.rate = rate
+        self.pitch = pitch
+        self.ffmpeg = shutil.which("ffmpeg")
+        if self.ffmpeg is None:
+            raise RuntimeError("ffmpeg is required for --tts-engine edge to convert MP3 output into WAV.")
+
+    def render(self, text: str, out_wav: str | Path, voice: str | None = None) -> None:
+        try:
+            import edge_tts
+        except Exception as exc:
+            raise RuntimeError("edge-tts is not installed. Install with: pip install edge-tts") from exc
+
+        selected_voice = voice or self.voice
+        normalized = " ".join(str(text).strip().split())
+        if not normalized:
+            raise ValueError("Cannot render empty text with Edge TTS.")
+        if normalized[-1] not in ".!?":
+            normalized += "."
+
+        async def _render_mp3(mp3_path: Path) -> None:
+            communicate = edge_tts.Communicate(
+                text=normalized,
+                voice=selected_voice,
+                rate=self.rate,
+                pitch=self.pitch,
+            )
+            await communicate.save(str(mp3_path))
+
+        out_wav = Path(out_wav)
+        out_wav.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            mp3_path = Path(tmp.name)
+
+        try:
+            asyncio.run(_render_mp3(mp3_path))
+            subprocess.run(
+                [
+                    self.ffmpeg,
+                    "-y",
+                    "-i",
+                    str(mp3_path),
+                    "-ar",
+                    "24000",
+                    "-ac",
+                    "1",
+                    str(out_wav),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        finally:
+            mp3_path.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------
 # Optional Coqui renderer retained as fallback
 # ---------------------------------------------------------------------
 
@@ -1063,6 +1200,8 @@ def render_candidate(
     if engine == "kokoro":
         assert voice is not None
         renderer.render(text, out_wav, voice=voice)
+    elif engine == "edge":
+        renderer.render(text, out_wav, voice=voice)
     elif engine == "piper":
         renderer.render(text, out_wav, voice=voice)
     elif engine == "coqui":
@@ -1074,6 +1213,13 @@ def render_candidate(
 def make_renderer(args):
     if args.tts_engine == "kokoro":
         return KokoroRenderer(lang_code=args.kokoro_lang_code, speed=args.kokoro_speed)
+    if args.tts_engine == "edge":
+        voice = args.edge_voice or EDGE_TTS_VOICES[args.edge_voice_mode]
+        return EdgeTTSRenderer(
+            voice=voice,
+            rate=args.edge_rate,
+            pitch=args.edge_pitch,
+        )
     if args.tts_engine == "piper":
         if not args.piper_model:
             raise RuntimeError("--piper-model is required when --tts-engine piper")
@@ -1109,12 +1255,8 @@ def synthesize_reference_if_needed(
         return Path(reference_wav)
 
     work_dir.mkdir(parents=True, exist_ok=True)
-    if args.tts_engine == "kokoro":
-        voice = args.kokoro_voices.split(",")[0].strip()
-    elif args.tts_engine == "piper":
-        voice = f"piper_speaker_{args.piper_speaker}" if args.piper_speaker is not None else "piper"
-    else:
-        voice = None
+    voices = resolve_tts_voices(args)
+    voice = voices[0] if voices else None
     ref = work_dir / f"reference_{safe_filename(word)}_{safe_filename(voice or 'coqui')}.wav"
     if not ref.exists():
         render_candidate(renderer, args.tts_engine, word, ref, voice=voice)
@@ -1135,13 +1277,7 @@ def score_candidates_with_audio(
 
     ref_emb = scorer.embed(reference_wav) if scorer is not None and reference_wav is not None else None
 
-    if args.tts_engine == "kokoro":
-        voices = [v.strip() for v in args.kokoro_voices.split(",") if v.strip()]
-    elif args.tts_engine == "piper":
-        # Piper voice identity is controlled by model and optional speaker id.
-        voices = [f"piper_speaker_{args.piper_speaker}" if args.piper_speaker is not None else "piper"]
-    else:
-        voices = [args.coqui_speaker or "coqui"]
+    voices = resolve_tts_voices(args)
 
     scored: list[Candidate] = []
 
@@ -1242,13 +1378,20 @@ def main() -> None:
     p.add_argument("--render-dir", type=str, default="kokoro_candidate_audio")
     p.add_argument("--json-out", type=str, default=None)
 
-    p.add_argument("--tts-engine", choices=["kokoro", "piper", "coqui"],
+    p.add_argument("--tts-engine", choices=["kokoro", "edge", "piper", "coqui"],
                    default="piper")
 
     # Kokoro controls.
     p.add_argument("--kokoro-voices", type=str, default="bf_emma,bm_lewis")
     p.add_argument("--kokoro-lang-code", type=str, default="b")
     p.add_argument("--kokoro-speed", type=float, default=1.0)
+
+    # Edge controls.
+    p.add_argument("--edge-voice", type=str, default=None)
+    p.add_argument("--edge-voices", type=str, default=None)
+    p.add_argument("--edge-voice-mode", choices=["female", "male", "woman", "man"], default="female")
+    p.add_argument("--edge-rate", type=str, default="+0%")
+    p.add_argument("--edge-pitch", type=str, default="+0Hz")
 
     # Piper controls.
     p.add_argument("--piper-exe", type=str, default="piper")
@@ -1295,6 +1438,8 @@ def main() -> None:
     resolved_voice_mode = None if args.voice_mode == "auto" else args.voice_mode
     if resolved_voice_mode is None and args.tts_engine == "piper":
         resolved_voice_mode = infer_piper_voice_mode(args.piper_model)
+    if resolved_voice_mode is None and args.tts_engine == "edge":
+        resolved_voice_mode = resolve_edge_voice_mode(args)
     resolved_gender = gender_for_voice_mode(resolved_voice_mode)
 
     if args.levels is not None:
@@ -1345,6 +1490,9 @@ def main() -> None:
         "kokoro_voices": [v.strip() for v in args.kokoro_voices.split(",") if v.strip()] if args.tts_engine == "kokoro" else None,
         "kokoro_lang_code": args.kokoro_lang_code if args.tts_engine == "kokoro" else None,
         "kokoro_speed": args.kokoro_speed if args.tts_engine == "kokoro" else None,
+        "edge_voices": resolve_tts_voices(args) if args.tts_engine == "edge" else None,
+        "edge_rate": args.edge_rate if args.tts_engine == "edge" else None,
+        "edge_pitch": args.edge_pitch if args.tts_engine == "edge" else None,
         "piper_model": args.piper_model if args.tts_engine == "piper" else None,
         "piper_config": args.piper_config if args.tts_engine == "piper" else None,
         "piper_speaker": args.piper_speaker if args.tts_engine == "piper" else None,
