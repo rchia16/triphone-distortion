@@ -138,7 +138,7 @@ run_word_voice() {
     edge)
       edge_voice="$(edge_voice_for "$voice")"
 
-      printf '\n[%s/%s] edge-voice=%s\n' "$voice" "$word" "$edge_voice"
+      printf '\n[%s/%s] edge-voice=%s mode=render-only\n' "$voice" "$word" "$edge_voice"
       "$PYTHON_BIN" "$PROCESSOR" \
         --word "$word" \
         --levels "$LEVELS" \
@@ -149,6 +149,7 @@ run_word_voice() {
         --edge-rate "$EDGE_RATE" \
         --edge-pitch "$EDGE_PITCH" \
         --voice-mode "$voice" \
+        --skip-neural \
         --render-audio \
         "${extra_args[@]}"
       ;;
