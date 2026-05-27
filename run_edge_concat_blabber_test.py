@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Dict, List, Optional, Set, Tuple
 
 
 DEFAULT_WORDS = ["go", "stop", "bath", "food", "yes", "no", "pain", "help"]
@@ -16,7 +17,7 @@ VOICE_MAP = {
 }
 
 
-def parse_csv(text: str) -> list[str]:
+def parse_csv(text: str) -> List[str]:
     return [item.strip() for item in str(text).split(",") if item.strip()]
 
 
@@ -27,7 +28,7 @@ def build_candidate_payload(
     word: str,
     levels: int,
     max_candidates: int,
-    extra_args: list[str],
+    extra_args: List[str],
 ) -> dict:
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
         json_path = Path(tmp.name)
@@ -54,13 +55,13 @@ def build_candidate_payload(
         json_path.unlink(missing_ok=True)
 
 
-def extract_candidate_lines(payload: dict) -> list[str]:
+def extract_candidate_lines(payload: dict) -> List[str]:
     assets = payload.get("assets") or payload.get("blabber_assets") or []
     if not isinstance(assets, list):
         return []
 
-    lines: list[str] = []
-    seen: set[tuple[str, float | None]] = set()
+    lines: List[str] = []
+    seen: Set[Tuple[str, Optional[float]]] = set()
     for asset in assets:
         text = str(asset.get("candidate_text") or asset.get("grapheme") or "").strip()
         level = asset.get("level")
@@ -72,8 +73,12 @@ def extract_candidate_lines(payload: dict) -> list[str]:
     return lines
 
 
-def build_concat_text(word_to_lines: dict[str, list[str]], carrier: str | None) -> str:
-    parts: list[str] = []
+def render_carrier_template(template: str, *, word: str, candidates: str) -> str:
+    return template.replace("{word}", word).replace("{candidates}", candidates)
+
+
+def build_concat_text(word_to_lines: Dict[str, List[str]], carrier: Optional[str]) -> str:
+    parts: List[str] = []
     for word, lines in word_to_lines.items():
         if not lines:
             continue
@@ -81,7 +86,7 @@ def build_concat_text(word_to_lines: dict[str, list[str]], carrier: str | None) 
         if not joined:
             continue
         if carrier:
-            parts.append(carrier.format(word=word, candidates=joined))
+            parts.append(render_carrier_template(carrier, word=word, candidates=joined))
         else:
             parts.append(joined + ".")
     return " ".join(parts).strip()
@@ -133,7 +138,7 @@ def main() -> None:
     voices = parse_csv(args.voices)
     carrier = args.carrier if args.carrier else None
 
-    word_to_lines: dict[str, list[str]] = {}
+    word_to_lines: Dict[str, List[str]] = {}
     for word in words:
         payload = build_candidate_payload(
             python_bin=args.python_bin,
@@ -152,7 +157,7 @@ def main() -> None:
     (out_dir / "concat_text.txt").write_text(concat_text)
     (out_dir / "candidate_blocks.json").write_text(json.dumps(word_to_lines, indent=2))
 
-    outputs: dict[str, str] = {}
+    outputs: Dict[str, str] = {}
     for voice_mode in voices:
         resolved_voice = VOICE_MAP.get(voice_mode, voice_mode)
         out_path = out_dir / f"concat_{voice_mode}.mp3"

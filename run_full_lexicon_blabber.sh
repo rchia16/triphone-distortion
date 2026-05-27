@@ -14,11 +14,32 @@ EDGE_RATE="${EDGE_RATE:-+0%}"
 EDGE_PITCH="${EDGE_PITCH:-+0Hz}"
 EDGE_FEMALE_VOICE="${EDGE_FEMALE_VOICE:-en-AU-NatashaNeural}"
 EDGE_MALE_VOICE="${EDGE_MALE_VOICE:-en-AU-WilliamNeural}"
+TEXT_ONLY="${TEXT_ONLY:-0}"
 
 WORDS=(go stop bath food yes no pain help)
 VOICES=(man woman)
 
-extra_args=("$@")
+extra_args=()
+EXTRA_ARGS_COUNT=0
+for arg in "$@"; do
+  case "$arg" in
+    --text-only)
+      TEXT_ONLY=1
+      ;;
+    *)
+      extra_args[EXTRA_ARGS_COUNT]="$arg"
+      EXTRA_ARGS_COUNT=$((EXTRA_ARGS_COUNT + 1))
+      ;;
+  esac
+done
+
+run_processor() {
+  local argv=("$PYTHON_BIN" "$PROCESSOR" "$@")
+  if ((EXTRA_ARGS_COUNT > 0)); then
+    argv+=("${extra_args[@]}")
+  fi
+  "${argv[@]}"
+}
 
 model_for_voice() {
   case "$1" in
@@ -59,6 +80,18 @@ preflight() {
   fi
 
   [[ -f "$PROCESSOR" ]] || missing+=("$PROCESSOR")
+
+  if ((TEXT_ONLY)); then
+    if ! command -v jq >/dev/null 2>&1; then
+      missing+=("jq")
+    fi
+    if ((${#missing[@]} > 0)); then
+      printf 'Missing required inputs; no processing was started:\n' >&2
+      printf '  %s\n' "${missing[@]}" >&2
+      exit 1
+    fi
+    return 0
+  fi
 
   case "$TTS_ENGINE" in
     piper)
@@ -104,6 +137,32 @@ PY
   fi
 }
 
+run_word_text_only() {
+  local word="$1"
+  local word_output_dir json_tmp text_out
+
+  word_output_dir="$OUTPUT_ROOT/text/triphone/$word"
+  text_out="$word_output_dir/${word}_combinations.txt"
+
+  mkdir -p "$word_output_dir"
+  json_tmp="$word_output_dir/.${word}_blabber_tmp.json"
+
+  printf '\n[text/%s] combinations=%s\n' "$word" "$text_out"
+  run_processor \
+    --word "$word" \
+    --level 1.0 \
+    --render-dir "$word_output_dir" \
+    --json-out "$json_tmp" \
+    --skip-neural
+
+  jq -r '
+    [.assets[]?]
+    | sort_by((.phone_distance // 0), (.candidate_text // ""))
+    | .[] .candidate_text // empty
+  ' "$json_tmp" > "$text_out"
+  rm -f "$json_tmp"
+}
+
 run_word_voice() {
   local voice="$1"
   local word="$2"
@@ -121,7 +180,7 @@ run_word_voice() {
       ref_wav="$(reference_wav_for "$voice" "$word")"
 
       printf '\n[%s/%s] reference=%s\n' "$voice" "$word" "$ref_wav"
-      "$PYTHON_BIN" "$PROCESSOR" \
+      run_processor \
         --word "$word" \
         --levels "$LEVELS" \
         --reference-wav "$ref_wav" \
@@ -132,14 +191,13 @@ run_word_voice() {
         --piper-config "$config" \
         --piper-length-scale "$PIPER_LENGTH_SCALE" \
         --voice-mode "$voice" \
-        --piper-use-python-module \
-        "${extra_args[@]}"
+        --piper-use-python-module
       ;;
     edge)
       edge_voice="$(edge_voice_for "$voice")"
 
       printf '\n[%s/%s] edge-voice=%s mode=render-only\n' "$voice" "$word" "$edge_voice"
-      "$PYTHON_BIN" "$PROCESSOR" \
+      run_processor \
         --word "$word" \
         --levels "$LEVELS" \
         --render-dir "$word_output_dir" \
@@ -150,8 +208,7 @@ run_word_voice() {
         --edge-pitch "$EDGE_PITCH" \
         --voice-mode "$voice" \
         --skip-neural \
-        --render-audio \
-        "${extra_args[@]}"
+        --render-audio
       ;;
     *)
       printf 'Unknown TTS_ENGINE: %s\n' "$TTS_ENGINE" >&2
@@ -164,6 +221,14 @@ main() {
   local voice word
 
   preflight
+
+  if ((TEXT_ONLY)); then
+    for word in "${WORDS[@]}"; do
+      run_word_text_only "$word"
+    done
+    printf '\nCompleted text-only lexicon generation under %s/text/triphone\n' "$OUTPUT_ROOT"
+    return 0
+  fi
 
   for voice in "${VOICES[@]}"; do
     for word in "${WORDS[@]}"; do
