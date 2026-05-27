@@ -261,7 +261,7 @@ def asset_word_matches(asset: dict[str, Any], word: str | None) -> bool:
 def asset_voice_matches(asset: dict[str, Any], voice: str | None) -> bool:
     if voice is None:
         return True
-+    return asset_voice_mode(asset) == normalize_voice_mode(voice)
+    return asset_voice_mode(asset) == normalize_voice_mode(voice)
 
 
 def find_ground_truth_asset(

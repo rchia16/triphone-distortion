@@ -9,16 +9,39 @@ PROCESSOR="${PROCESSOR:-deep_phone_candidate_stack_blabber_triphone.py}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-/data/raqchia/audio-assets/speech-assets-triphone}"
 LEVELS="${LEVELS:-8}"
 PIPER_LENGTH_SCALE="${PIPER_LENGTH_SCALE:-1.2}"
-TTS_ENGINE="${TTS_ENGINE:-piper}"
+TTS_ENGINE="${TTS_ENGINE:-edge}"
+RANKING_MODE="${RANKING_MODE:-temporal}"
+OVERWRITE="${OVERWRITE:-0}"
 EDGE_RATE="${EDGE_RATE:-+0%}"
 EDGE_PITCH="${EDGE_PITCH:-+0Hz}"
-EDGE_FEMALE_VOICE="${EDGE_FEMALE_VOICE:-en-AU-NatashaNeural}"
-EDGE_MALE_VOICE="${EDGE_MALE_VOICE:-en-AU-WilliamNeural}"
+EDGE_FEMALE_VOICE="${EDGE_FEMALE_VOICE:-en-GB-AriaNeural}"
+EDGE_MALE_VOICE="${EDGE_MALE_VOICE:-en-GB-RyanNeural}"
 
 WORDS=(go stop bath food yes no pain help)
 VOICES=(man woman)
 
 extra_args=("$@")
+
+processor_supports_audio_ranking() {
+  case "$(basename "$PROCESSOR")" in
+    my_test.py) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+processor_supports_render_existing() {
+  case "$(basename "$PROCESSOR")" in
+    deep_phone_candidate_stack_blabber_triphone.py) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+processor_supports_audio_ranking() {
+  case "$(basename "$PROCESSOR")" in
+    my_test.py) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 model_for_voice() {
   case "$1" in
@@ -108,11 +131,25 @@ run_word_voice() {
   local voice="$1"
   local word="$2"
   local model config ref_wav word_output_dir json_out edge_voice
+  local -a processor_flags=()
 
   word_output_dir="$OUTPUT_ROOT/$voice/triphone/$word"
   json_out="$word_output_dir/${word}_blabber_scored.json"
 
   mkdir -p "$word_output_dir"
+
+  if [[ "$OVERWRITE" == "1" ]]; then
+    if processor_supports_render_existing; then
+      processor_flags+=(--render-existing)
+    fi
+    if processor_supports_audio_ranking; then
+      processor_flags+=(--overwrite)
+    fi
+  fi
+
+  if processor_supports_audio_ranking; then
+    processor_flags+=(--ranking-mode "$RANKING_MODE")
+  fi
 
   case "$TTS_ENGINE" in
     piper)
@@ -133,6 +170,7 @@ run_word_voice() {
         --piper-length-scale "$PIPER_LENGTH_SCALE" \
         --voice-mode "$voice" \
         --piper-use-python-module \
+        "${processor_flags[@]}" \
         "${extra_args[@]}"
       ;;
     edge)
@@ -151,6 +189,7 @@ run_word_voice() {
         --voice-mode "$voice" \
         --skip-neural \
         --render-audio \
+        "${processor_flags[@]}" \
         "${extra_args[@]}"
       ;;
     *)

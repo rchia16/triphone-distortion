@@ -38,8 +38,15 @@ Environment variables (selection behavior):
 """
 from pathlib import Path
 import os
+import argparse
+import json
 import pprint
 import sys
+
+import numpy as np
+from scipy.fftpack import dct
+from scipy.io import wavfile
+from scipy.signal import stft, resample
 
 from Template_l2_compare_v2 import (
     compare_signal_to_prebuilt_template,
@@ -99,6 +106,12 @@ TEMPORAL_TOP_K = int(os.environ.get("TEMPORAL_TOP_K", "5"))
 # decrease for softer
 TEMPORAL_MATCH_WEIGHT = float(os.environ.get("TEMPORAL_MATCH_WEIGHT", "3.0"))
 PHONE_GAP_PENALTY = 0.65
+RANKING_MODE = str(os.environ.get("RANKING_MODE", "temporal")).strip().lower()
+CMVN_N_FFT = int(os.environ.get("CMVN_N_FFT", "1024"))
+CMVN_HOP = int(os.environ.get("CMVN_HOP", "256"))
+CMVN_N_MELS = int(os.environ.get("CMVN_N_MELS", "80"))
+CMVN_N_MFCC = int(os.environ.get("CMVN_N_MFCC", "32"))
+CMVN_DTW_MAX_FRAMES = int(os.environ.get("CMVN_DTW_MAX_FRAMES", "0"))
 
 LEXICON = {
     "go": ["G", "OW"],
@@ -183,6 +196,119 @@ def library_json_path(word: str, voice_mode: str) -> Path:
 def _asset_level(asset: dict) -> float | None:
     """Read the effective distortion level from an asset payload."""
     return asset_level(asset)
+
+
+def _load_audio_mono(path: str | Path) -> tuple[int, np.ndarray]:
+    """Load a WAV file as a mono float32 waveform in [-1, 1]."""
+    sr, audio = wavfile.read(str(path))
+    audio = np.asarray(audio)
+    if audio.ndim == 2:
+        audio = audio.mean(axis=1)
+    if np.issubdtype(audio.dtype, np.integer):
+        denom = float(max(abs(np.iinfo(audio.dtype).min), np.iinfo(audio.dtype).max))
+        audio = audio.astype(np.float32) / max(1.0, denom)
+    else:
+        audio = audio.astype(np.float32)
+    audio = np.nan_to_num(audio)
+    peak = float(np.max(np.abs(audio)))
+    if peak > 0:
+        audio = audio / peak
+    return int(sr), audio.astype(np.float32)
+
+
+def _hz_to_mel(hz: np.ndarray | float) -> np.ndarray:
+    return 2595.0 * np.log10(1.0 + np.asarray(hz) / 700.0)
+
+
+def _mel_to_hz(mel: np.ndarray | float) -> np.ndarray:
+    return 700.0 * (10.0 ** (np.asarray(mel) / 2595.0) - 1.0)
+
+
+def _mel_filterbank(sr: int, n_fft: int, n_mels: int, fmin: float = 40.0, fmax: float | None = None) -> np.ndarray:
+    if fmax is None:
+        fmax = sr / 2.0
+    mels = np.linspace(_hz_to_mel(fmin), _hz_to_mel(fmax), n_mels + 2)
+    hz = _mel_to_hz(mels)
+    bins = np.floor((n_fft + 1) * hz / sr).astype(int)
+    fb = np.zeros((n_mels, n_fft // 2 + 1), dtype=np.float32)
+    for i in range(1, n_mels + 1):
+        left, center, right = bins[i - 1], bins[i], bins[i + 1]
+        if center > left:
+            fb[i - 1, left:center] = (np.arange(left, center) - left) / max(1, center - left)
+        if right > center:
+            fb[i - 1, center:right] = (right - np.arange(center, right)) / max(1, right - center)
+    return fb
+
+
+def _extract_mfcc(audio: np.ndarray, sr: int) -> np.ndarray:
+    """Extract MFCC features for CMVN-based ranking."""
+    _, _, z = stft(audio, fs=sr, nperseg=CMVN_N_FFT, noverlap=CMVN_N_FFT - CMVN_HOP, nfft=CMVN_N_FFT, boundary="zeros")
+    mag = np.abs(z) + 1e-8
+    mel = _mel_filterbank(sr, CMVN_N_FFT, CMVN_N_MELS) @ mag
+    logmel = np.log(np.maximum(mel, 1e-8))
+    mfcc = dct(logmel, axis=0, norm="ortho")[:CMVN_N_MFCC]
+    return mfcc.astype(np.float32)
+
+
+def _cmvn(features: np.ndarray) -> np.ndarray:
+    """Apply per-utterance CMVN."""
+    if features.size == 0:
+        return features.astype(np.float32)
+    mean = features.mean(axis=1, keepdims=True)
+    std = features.std(axis=1, keepdims=True)
+    return ((features - mean) / np.maximum(std, 1e-8)).astype(np.float32)
+
+
+def _resample_time_axis(features: np.ndarray, frames: int) -> np.ndarray:
+    """Resample features along the time axis to a fixed frame count."""
+    if features.shape[1] == frames:
+        return features
+    if frames <= 0:
+        return features[:, :0]
+    return resample(features, frames, axis=1).astype(np.float32)
+
+
+def _dtw_distance(X: np.ndarray, Y: np.ndarray) -> float:
+    """Compute DTW distance between two feature matrices using squared Euclidean frame cost."""
+    n, m = X.shape[1], Y.shape[1]
+    if n == 0 or m == 0:
+        return float("inf")
+    prev = np.full(m + 1, np.inf, dtype=np.float64)
+    curr = np.full(m + 1, np.inf, dtype=np.float64)
+    prev[0] = 0.0
+    for i in range(1, n + 1):
+        curr[0] = np.inf
+        xi = X[:, i - 1]
+        for j in range(1, m + 1):
+            cost = float(np.sum((xi - Y[:, j - 1]) ** 2))
+            curr[j] = cost + min(curr[j - 1], prev[j], prev[j - 1])
+        prev, curr = curr, prev
+    return float(prev[m] / max(1, n + m))
+
+
+def _cmvn_distance(reference_path: str | Path, candidate_path: str | Path) -> float:
+    """Score candidate audio against the reference audio using CMVN-normalized MFCC DTW."""
+    ref_sr, ref_audio = _load_audio_mono(reference_path)
+    cand_sr, cand_audio = _load_audio_mono(candidate_path)
+    ref_mfcc = _cmvn(_extract_mfcc(ref_audio, ref_sr))
+    cand_mfcc = _cmvn(_extract_mfcc(cand_audio, cand_sr))
+    if ref_mfcc.size == 0 or cand_mfcc.size == 0:
+        return float("inf")
+    if CMVN_DTW_MAX_FRAMES > 0:
+        ref_mfcc = _resample_time_axis(ref_mfcc, CMVN_DTW_MAX_FRAMES)
+        cand_mfcc = _resample_time_axis(cand_mfcc, CMVN_DTW_MAX_FRAMES)
+    return _dtw_distance(ref_mfcc, cand_mfcc)
+
+
+def _find_cmvn_reference_asset(rows: list[dict], canonical: list[str]) -> dict | None:
+    """Prefer the ground-truth audio as the CMVN reference; fall back to the closest canonical match."""
+    for row in rows:
+        asset = row["asset"]
+        phones = list(asset.get("phones") or [])
+        canonical_phones = list(asset.get("canonical_phones") or canonical)
+        if bool(asset.get("is_ground_truth")) or phones == canonical_phones:
+            return asset
+    return rows[0]["asset"] if rows else None
 
 
 def _normalized_time_distance_profile(comparison: dict) -> list[float]:
@@ -334,6 +460,55 @@ def rerank_top_candidates_by_temporal_profile(
     return reranked
 
 
+def rerank_candidates_by_cmvn_audio(
+    *,
+    rows: list[dict],
+    canonical: list[str],
+) -> list[dict]:
+    """Rerank candidates by audio-space CMVN distance to a reference asset."""
+    reference_asset = _find_cmvn_reference_asset(rows, canonical)
+    if reference_asset is None:
+        return []
+    reference_audio = reference_asset.get("audio_path") or reference_asset.get("wav_path") or reference_asset.get("output_audio_path")
+    if not reference_audio:
+        return []
+
+    reranked: list[dict] = []
+    for row in rows:
+        asset = row["asset"]
+        candidate_audio = asset.get("audio_path") or asset.get("wav_path") or asset.get("output_audio_path")
+        if not candidate_audio:
+            continue
+        distance = _cmvn_distance(reference_audio, candidate_audio)
+        details = dict(row["score_details"])
+        details.update(
+            {
+                "cmvn_reference_asset_id": reference_asset.get("asset_id"),
+                "cmvn_distance": distance,
+            }
+        )
+        reranked.append(
+            {
+                "score": -distance,
+                "base_score": row["score"],
+                "score_details": details,
+                "asset": asset,
+                "cmvn_reference_asset": reference_asset,
+                "cmvn_distance": distance,
+            }
+        )
+
+    reranked.sort(
+        key=lambda r: (
+            r["cmvn_distance"],
+            -(r["asset"].get("suitability_score") or 0.0),
+            r["asset"].get("candidate_text") or "",
+            r["asset"].get("asset_id") or "",
+        )
+    )
+    return reranked
+
+
 def select_triphone_global_asset(comparison: dict, requested_voice: str) -> dict:
     """Select one triphone asset using global + temporal feedback criteria."""
     word = str(comparison.get("label_name") or "").strip().lower()
@@ -387,12 +562,26 @@ def select_triphone_global_asset(comparison: dict, requested_voice: str) -> dict
     if not selected:
         raise ValueError(f"No triphone assets matched word='{word}' voice='{voice_mode}'.")
 
-    temporal_pool = selected[:max(1, TEMPORAL_TOP_K)]
-    reranked = rerank_top_candidates_by_temporal_profile(
-        rows=temporal_pool,
-        comparison=comparison,
-        canonical=LEXICON[word],
-    )
+    if RANKING_MODE in {"cmvn", "audio_cmvn"}:
+        temporal_pool = selected
+        reranked = rerank_candidates_by_cmvn_audio(
+            rows=temporal_pool,
+            canonical=LEXICON[word],
+        )
+        if not reranked:
+            temporal_pool = selected[:max(1, TEMPORAL_TOP_K)]
+            reranked = rerank_top_candidates_by_temporal_profile(
+                rows=temporal_pool,
+                comparison=comparison,
+                canonical=LEXICON[word],
+            )
+    else:
+        temporal_pool = selected[:max(1, TEMPORAL_TOP_K)]
+        reranked = rerank_top_candidates_by_temporal_profile(
+            rows=temporal_pool,
+            comparison=comparison,
+            canonical=LEXICON[word],
+        )
     best = reranked[0]
     asset = best["asset"]
     return {
@@ -407,6 +596,7 @@ def select_triphone_global_asset(comparison: dict, requested_voice: str) -> dict
         "target_level_info": target_level_info,
         "feedback_mode": feedback_mode,
         "level_policy": LEVEL_POLICY,
+        "ranking_mode": RANKING_MODE,
         "high_level_min": clamp_unit(HIGH_LEVEL_MIN),
         "requested_generation_signature": [target_level],
         "selected_phoneme_grades": asset.get("phoneme_values", [asset.get("level")]),
@@ -427,6 +617,8 @@ def select_triphone_global_asset(comparison: dict, requested_voice: str) -> dict
                 "base_score": row.get("base_score"),
                 "score_details": row["score_details"],
                 "candidate_temporal_profile": row.get("candidate_temporal_profile"),
+                "cmvn_distance": row.get("cmvn_distance"),
+                "cmvn_reference_asset_id": row.get("score_details", {}).get("cmvn_reference_asset_id"),
             }
             for row in reranked[:TOP_K_DEBUG]
         ],
@@ -436,6 +628,16 @@ def select_triphone_global_asset(comparison: dict, requested_voice: str) -> dict
 
 
 if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--json-out", default=None, help="Write the selection result to this JSON file.")
+    p.add_argument("--overwrite", action="store_true", help="Overwrite --json-out if it already exists.")
+    p.add_argument("--ranking-mode", default=RANKING_MODE, choices=["temporal", "cmvn", "audio_cmvn"], help="Ranking mode to use for final candidate selection.")
+    p.add_argument("--requested-voice", default=REQUESTED_VOICE, choices=["female", "male", "woman", "man"], help="Requested voice bank.")
+    args = p.parse_args()
+
+    RANKING_MODE = str(args.ranking_mode).strip().lower()
+    REQUESTED_VOICE = str(args.requested_voice).strip().lower()
+
     """
     Take from `Function call copy_v2.ipynb`
     """
@@ -506,3 +708,9 @@ if __name__ == "__main__":
     print("Base score:", selection["base_score"])
     print("Top candidates:")
     pprint.pprint(selection["top_candidates"])
+
+    if args.json_out:
+        out_path = Path(args.json_out)
+        if out_path.exists() and not args.overwrite:
+            raise FileExistsError(f"Refusing to overwrite existing file: {out_path}. Pass --overwrite to replace it.")
+        out_path.write_text(json.dumps(selection, indent=2, default=str), encoding="utf-8")
