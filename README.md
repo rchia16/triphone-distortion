@@ -123,7 +123,31 @@ Fast check:
 - If `temporal_match` is low for selected candidates, time-shape fit is weak.
 - If selected candidates are too strong despite low mismatch, deadband/weights are too aggressive.
 
-## 7) Edge TTS rendering
+## 7) Dynamic phoneme mapping
+
+`cmu_per_phoneme.py` derives canonical phones from `cmudict` at runtime and
+generates same-length phone substitutions from an EEG mismatch profile.
+
+Install:
+
+```bash
+pip install cmudict
+```
+
+Key controls:
+- `CMVN_PHONE_MAX_THRESHOLD`: rejects any single generated phone mapping whose segmented audio CMVN distance is above this value.
+- `PHONEME_EEG_WEIGHT` and `PHONEME_CMVN_WEIGHT`: tune dynamic phoneme ranking.
+- `PHONEME_OPTIONS_PER_SLOT`: caps generated substitutions per canonical phone.
+
+The selected JSON includes `canonical_phones`, `generated_phones`,
+`phoneme_map`, `per_phoneme_eeg_targets`, and
+`per_phoneme_cmvn_distances`.
+
+The current asset libraries do not contain phone-level alignments, so
+per-phoneme CMVN uses equal-duration segmentation of the reference and
+candidate word audio.
+
+## 8) Edge TTS rendering
 
 Install:
 

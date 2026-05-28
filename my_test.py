@@ -712,5 +712,11 @@ if __name__ == "__main__":
     if args.json_out:
         out_path = Path(args.json_out)
         if out_path.exists() and not args.overwrite:
-            raise FileExistsError(f"Refusing to overwrite existing file: {out_path}. Pass --overwrite to replace it.")
-        out_path.write_text(json.dumps(selection, indent=2, default=str), encoding="utf-8")
+            raise FileExistsError(
+                f"Refusing to overwrite existing file: "\
+                f"{out_path}. Pass --overwrite to replace it."
+            )
+        out_path.write_text(
+            json.dumps(selection, indent=2, default=str),
+            encoding="utf-8"
+        )

@@ -1,67 +1,42 @@
 #!/usr/bin/env python3
 """
-Dynamic cmudict-based phoneme-by-phoneme candidate selection.
+Per-phoneme candidate selection and phone-asset stitching.
 
-What this script does:
-  1. Resolve the target word's canonical ARPABET phones with cmudict.
-  2. Convert EEG template mismatch (`comparison["per_time_l2"]`) into one
-     normalized target distance per canonical phone.
-  3. Generate same-length candidate phone substitutions.
-  4. Match generated phone sequences to existing rendered assets when possible.
-     If no matching asset exists, keep an assetless synthetic candidate so the
-     phoneme mapping can still be returned.
-  5. Reject any candidate whose single-phone distance is greater than
-     `CMVN_PHONE_MAX_THRESHOLD`.
-  6. Select the valid candidate with the largest phoneme-distance change, with
-     EEG target fit and threshold margin as secondary score terms.
+Purpose:
+  This script maps an EEG/template mismatch signal to a new ARPABET phone
+  sequence, then optionally pregenerates stitched word WAVs from isolated
+  Australian English phone assets.
 
-Why a reference asset is useful:
-  CMVN is not an absolute property of one audio file. It is a distance between
-  two CMVN-normalized feature sequences. To decide whether a generated phoneme
-  has gone "too far", this script compares candidate audio segments against a
-  canonical/reference audio asset for the same word and voice. The reference is
-  preferably the ground-truth asset whose phones match the cmudict canonical
-  sequence.
+Inputs:
+  - Target word, e.g. `yes`.
+  - Comparison JSON containing `per_time_l2`.
+  - Isolated phone inventory, default:
+      /data/raqchia/audio-assets/aus-phones/cleaned
 
-What happens when no reference asset exists:
-  The script creates a synthetic ground-truth reference from the original
-  cmudict phones. For example, `yes` becomes `Y EH S`. If no reference audio or
-  candidate audio exists, the single-phone threshold metric falls back to
-  articulatory distance between the original and generated phones. That means a
-  large EEG mismatch in the first third of a 3-phone word drives the first phone
-  target upward and selects the largest valid first-phone substitution under the
-  threshold.
+Important setup:
+  Run `clean_aus_phone_inventory.py --overwrite` first if the cleaned inventory
+  does not exist. The cleaned inventory should contain one isolated first phone
+  segment per file, e.g. `j.wav`, `ɛ.wav`, `s.wav`.
 
-Important limitation:
-  The current asset JSON does not include phone-level timestamps. Per-phoneme
-  CMVN therefore uses equal-duration segmentation of the reference and candidate
-  word audio. This is deterministic, but it is an approximation. Replace
-  `default_phone_cmvn_distance` with an aligner-backed implementation when real
-  phone boundaries are available.
+How selection works:
+  1. Resolve the word to canonical ARPABET phones with cmudict when available.
+     Built-in fallback words are: yes, no, bath, pain, help, food, go, stop.
+  2. Convert `comparison["per_time_l2"]` into one normalized target per phone.
+  3. Generate same-length phone substitutions.
+  4. Load or create phone-level pairwise CMVN distances from the inventory.
+  5. Score each candidate phone-by-phone against the canonical phones.
+  6. Reject candidates above `--cmvn-phone-max-threshold`.
+  7. Return the best valid generated phone sequence and per-phone diagnostics.
 
-Example:
-  python cmu_per_phoneme.py \\
-    --word yes \\
-    --comparison-json comparison.json \\
-    --library-json /data/raqchia/audio-assets/speech-assets-triphone/woman/triphone/yes/yes_blabber_scored.json \\
-    --requested-voice female \\
-    --cmvn-phone-max-threshold 0.30 \\
-    --json-out yes_per_phoneme_selection.json
+CMVN pairwise cache:
+  The script does not require `--library-json` or rendered word assets.
+  It compares isolated phone audio directly. If the cache does not exist, it is
+  created automatically at:
+      <phone-inventory-root>/cmvn_pairwise_distances.json
 
-Preview the built-in word set without audio assets:
-  python cmu_per_phoneme.py --preview
-
-Preview uses the words `yes,no,bath,pain,help,food,go,stop` and the default
-distance signal `0.1,0.3,0.6,0.9`. For 2-phone words it averages the first
-half and second half of the signal. For 3-phone words it smooths with
-overlapping pairs: first two, middle two, last two.
-
-Pre-generate a full per-phoneme asset grid:
-  python cmu_per_phoneme.py --pregenerate-assets --granularity 2
-
-This writes metadata under `per-phoneme/<voice>/<word>/`. Add `--render-audio`
-to render WAVs. Render text stays as separated phoneme tokens, e.g. `Y EH S`;
-it is never collapsed into a pseudo-word.
+  The cache stores raw CMVN-MFCC DTW distances plus normalized [0,1] distances.
+  Selection uses the normalized distances so the default threshold scale remains
+  interpretable. Use `--rebuild-cmvn-pairwise` to force recomputation.
 
 Required comparison JSON shape:
   {
@@ -69,8 +44,45 @@ Required comparison JSON shape:
     "times": [0.0, 0.1, 0.2]
   }
 
+How to preview without audio:
+  python per_phoneme.py --preview
+
+  Preview uses `yes,no,bath,pain,help,food,go,stop` and the default signal
+  `0.1,0.3,0.6,0.9`. For 2-phone words it averages the first and second half.
+  For 3-phone words it smooths with first two, middle two, and last two values.
+
+How to select a new phone word from EEG/template mismatch:
+  python per_phoneme.py \\
+    --word yes \\
+    --comparison-json comparison.json \\
+    --phone-inventory-root /data/raqchia/audio-assets/aus-phones/cleaned \\
+    --cmvn-phone-max-threshold 0.75 \\
+    --json-out yes_per_phoneme_selection.json
+
+How to rebuild the CMVN pairwise cache:
+  python per_phoneme.py \\
+    --word yes \\
+    --comparison-json comparison.json \\
+    --phone-inventory-root /data/raqchia/audio-assets/aus-phones/cleaned \\
+    --rebuild-cmvn-pairwise
+
+How to pregenerate stitched per-phoneme word assets:
+  python per_phoneme.py \\
+    --pregenerate-assets \\
+    --render-audio \\
+    --render-audio-source phone-stitch \\
+    --phone-inventory-root /data/raqchia/audio-assets/aus-phones/cleaned \\
+    --words yes,no,bath,pain,help,food,go,stop \\
+    --voices woman,man \\
+    --granularity 2
+
+Pregeneration output:
+  - WAVs and JSON are written under `per-phoneme/<voice>/<word>/`.
+  - Distance filenames look like `0.0_1.0_0.0.wav`.
+  - Candidates with missing phone inventory assets are skipped.
+
 Runtime controls:
-  CMVN_PHONE_MAX_THRESHOLD: default max per-phone CMVN distance.
+  CMVN_PHONE_MAX_THRESHOLD: default max normalized per-phone CMVN distance.
   PHONEME_EEG_WEIGHT: score weight for filling the EEG-derived target.
   PHONEME_CMVN_WEIGHT: score weight for staying below the CMVN threshold.
   PHONEME_OPTIONS_PER_SLOT: max substitutions considered per canonical phone.
@@ -89,16 +101,20 @@ import subprocess
 import tempfile
 import wave
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
+from Template_l2_compare_v2 import (
+    build_template_from_dataset,
+    compare_signal_to_prebuilt_template,
+    get_one_trial_from_dataset,
+)
 from deep_phone_candidate_stack_blabber_triphone import (
     PHONE_FEATURES,
     articulatory_distance,
     make_renderer,
     render_candidate,
-    safe_filename,
     validate_rendered_duration,
     variants_for_phone,
 )
@@ -114,8 +130,7 @@ from my_test import (
     CMVN_DTW_MAX_FRAMES,
     TOP_K_DEBUG,
 )
-from select_blabber_asset import normalize_voice_mode
-from select_blabber_asset_triphone import load_assets
+from select_blabber_asset import adapt_comparison_result, normalize_voice_mode
 
 
 CMVN_PHONE_MAX_THRESHOLD = float(os.environ.get("CMVN_PHONE_MAX_THRESHOLD", "1.0"))
@@ -135,7 +150,9 @@ PREVIEW_LEXICON: dict[str, list[str]] = {
     "help": ["HH", "EH", "L", "P"],
 }
 
-DEFAULT_PHONE_INVENTORY_ROOT = "/data/raqchia/audio-assets/aus-phones"
+DEFAULT_PHONE_INVENTORY_ROOT = "/data/raqchia/audio-assets/aus-phones/cleaned"
+DEFAULT_OUTPUT_ROOT = "per-phoneme"
+DEFAULT_REQUESTED_VOICE = "man"
 
 # Local mapping for the Australian isolated-phone inventory. Keep this local to
 # avoid importing generator scripts with CLI/runtime side effects.
@@ -439,43 +456,41 @@ def select_dynamic_phoneme_candidate(
     word: str,
     canonical: list[str],
     comparison: dict[str, Any],
-    assets: list[dict[str, Any]],
-    voice_mode: str,
+    pairwise_distances: dict[str, Any],
     cmvn_phone_max_threshold: float = CMVN_PHONE_MAX_THRESHOLD,
-    phone_cmvn_distance_fn: Callable[..., float] | None = None,
 ) -> dict[str, Any] | None:
     """Generate and rank phoneme-by-phoneme candidates using EEG and CMVN limits."""
     eeg_targets = per_phoneme_eeg_targets(comparison, len(canonical))
     generated = generate_dynamic_phone_sequences(canonical, eeg_targets)
-    assets_by_phones = index_assets_by_phones(assets)
-    reference_asset = find_cmvn_reference_asset(assets, canonical, voice_mode)
-    if reference_asset is None:
-        reference_asset = synthetic_asset(word, canonical, voice_mode, "ground_truth")
-
-    cmvn_distance_fn = phone_cmvn_distance_fn or default_phone_cmvn_distance
     invalid: list[dict[str, Any]] = []
     ranked: list[dict[str, Any]] = []
     max_threshold = float(cmvn_phone_max_threshold)
 
     for candidate in generated:
         phones = list(candidate["phones"])
-        asset = best_asset_for_generated_phones(assets_by_phones, phones, voice_mode)
-        if asset is None:
-            asset = synthetic_asset(word, phones, voice_mode, "candidate")
-
         cmvn_distances: list[float] = []
+        missing_pairs: list[dict[str, str]] = []
         for idx, (canonical_phone, generated_phone) in enumerate(zip(canonical, phones)):
-            distance = float(
-                cmvn_distance_fn(
-                    canonical_phone=canonical_phone,
-                    generated_phone=generated_phone,
-                    phone_index=idx,
-                    phone_count=len(canonical),
-                    reference_asset=reference_asset,
-                    candidate_asset=asset,
+            distance = pairwise_cmvn_distance(pairwise_distances, canonical_phone, generated_phone)
+            if distance is None:
+                missing_pairs.append(
+                    {
+                        "source": strip_cmudict_stress(canonical_phone),
+                        "generated": strip_cmudict_stress(generated_phone),
+                    }
                 )
+            else:
+                cmvn_distances.append(distance)
+
+        if missing_pairs:
+            invalid.append(
+                {
+                    "phones": phones,
+                    "reason": "missing_cmvn_pairwise_distance",
+                    "missing_pairs": missing_pairs,
+                }
             )
-            cmvn_distances.append(distance)
+            continue
 
         if any(distance > max_threshold for distance in cmvn_distances):
             invalid.append(
@@ -501,7 +516,6 @@ def select_dynamic_phoneme_candidate(
         ranked.append(
             {
                 "score": score,
-                "asset": asset,
                 "generated_phones": phones,
                 "canonical_phones": list(canonical),
                 "per_phoneme_eeg_targets": eeg_targets,
@@ -514,10 +528,8 @@ def select_dynamic_phoneme_candidate(
                     "mean_phone_distance": mean_phone_distance,
                     "mean_eeg_fill": mean_eeg_fill,
                     "mean_cmvn_margin": mean_cmvn_margin,
-                    "cmvn_reference_asset_id": reference_asset.get("asset_id"),
-                    "cmvn_reference_synthetic": bool(reference_asset.get("synthetic_asset")),
-                    "candidate_synthetic": bool(asset.get("synthetic_asset")),
-                    "distance_metric": "cmvn" if asset_audio_path(reference_asset) and asset_audio_path(asset) else "articulatory_fallback",
+                    "distance_metric": pairwise_distances.get("distance_metric", "cmvn_mfcc_dtw"),
+                    "cmvn_pairwise_inventory_root": pairwise_distances.get("inventory_root"),
                 },
             }
         )
@@ -555,12 +567,12 @@ def select_dynamic_phoneme_candidate(
         "cmvn_phone_max_threshold": max_threshold,
         "score": best["score"],
         "score_details": best["score_details"],
-        "asset": best["asset"],
-        "reference_asset": reference_asset,
+        "asset": synthetic_asset(word, best["generated_phones"], "phone_inventory", "candidate"),
+        "reference_asset": synthetic_asset(word, canonical, "phone_inventory", "ground_truth"),
+        "cmvn_pairwise_distances_path": cmvn_pairwise_cache_path(Path(str(pairwise_distances.get("inventory_root") or DEFAULT_PHONE_INVENTORY_ROOT))),
         "invalid_phoneme_candidates": invalid[:TOP_K_DEBUG],
         "top_candidates": [
             {
-                "asset_id": row["asset"].get("asset_id"),
                 "generated_phones": row["generated_phones"],
                 "score": row["score"],
                 "score_details": row["score_details"],
@@ -770,6 +782,119 @@ def decode_phone_asset_to_audio(path: Path, *, sample_rate: int = 24000) -> tupl
         tmp_path.unlink(missing_ok=True)
 
 
+def cmvn_pairwise_cache_path(inventory_root: Path) -> Path:
+    return inventory_root / "cmvn_pairwise_distances.json"
+
+
+def available_inventory_phone_assets(inventory_root: Path) -> dict[str, Path]:
+    """Return ARPABET phones that can be resolved to inventory audio assets."""
+    phones = sorted(set(ARPABET_TO_AUS_IPA_CANDIDATES) | set(PHONE_FEATURES))
+    assets: dict[str, Path] = {}
+    for phone in phones:
+        path = resolve_phone_inventory_asset(phone, inventory_root)
+        if path is not None:
+            assets[phone] = path
+    return assets
+
+
+def _cmvn_features_from_phone_asset(path: Path) -> np.ndarray:
+    sample_rate, audio = decode_phone_asset_to_audio(path, sample_rate=24000)
+    features = _cmvn(_extract_mfcc(audio, sample_rate))
+    if CMVN_DTW_MAX_FRAMES > 0 and features.size:
+        features = _resample_time_axis(features, CMVN_DTW_MAX_FRAMES)
+    return features
+
+
+def build_cmvn_pairwise_distances(inventory_root: Path) -> dict[str, Any]:
+    """Build a pairwise CMVN-DTW matrix for all resolvable inventory phones."""
+    phone_assets = available_inventory_phone_assets(inventory_root)
+    if not phone_assets:
+        raise FileNotFoundError(f"No phone assets found in inventory root: {inventory_root}")
+
+    phone_features: dict[str, np.ndarray] = {}
+    skipped: dict[str, str] = {}
+    for phone, path in phone_assets.items():
+        try:
+            features = _cmvn_features_from_phone_asset(path)
+            if features.size == 0:
+                skipped[phone] = "empty_features"
+            else:
+                phone_features[phone] = features
+        except Exception as exc:
+            skipped[phone] = str(exc)
+
+    phones = sorted(phone_features)
+    raw_distances: dict[str, dict[str, float]] = {phone: {} for phone in phones}
+    for idx, source in enumerate(phones):
+        for target in phones[idx:]:
+            if source == target:
+                distance = 0.0
+            else:
+                distance = float(_dtw_distance(phone_features[source], phone_features[target]))
+            raw_distances[source][target] = distance
+            raw_distances[target][source] = distance
+
+    payload = {
+        "schema_version": "1.0-cmvn-phone-pairwise",
+        "inventory_root": str(inventory_root),
+        "distance_metric": "cmvn_mfcc_dtw",
+        "distance_scale": "normalized_0_1",
+        "phones": phones,
+        "phone_assets": {phone: str(phone_assets[phone]) for phone in phones},
+        "raw_distances": raw_distances,
+        "skipped": skipped,
+    }
+    return normalize_pairwise_payload(payload)
+
+
+def normalize_pairwise_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Add normalized [0,1] distances while preserving raw CMVN distances."""
+    raw_distances = payload.get("raw_distances") or payload.get("distances") or {}
+    max_distance = 0.0
+    for row in raw_distances.values():
+        for value in row.values():
+            max_distance = max(max_distance, float(value))
+
+    normalized: dict[str, dict[str, float]] = {}
+    for source, row in raw_distances.items():
+        normalized[source] = {}
+        for target, value in row.items():
+            normalized[source][target] = 0.0 if max_distance <= 0.0 else float(value) / max_distance
+
+    payload["raw_distances"] = raw_distances
+    payload["distances"] = normalized
+    payload["raw_distance_max"] = max_distance
+    payload["distance_scale"] = "normalized_0_1"
+    return payload
+
+
+def load_or_create_cmvn_pairwise_distances(inventory_root: Path, *, rebuild: bool = False) -> dict[str, Any]:
+    """Load the CMVN phone-distance cache, creating it when absent."""
+    cache_path = cmvn_pairwise_cache_path(inventory_root)
+    if cache_path.is_file() and not rebuild:
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        if payload.get("distance_scale") != "normalized_0_1" or "raw_distances" not in payload:
+            payload = normalize_pairwise_payload(payload)
+            cache_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        return payload
+
+    payload = build_cmvn_pairwise_distances(inventory_root)
+    inventory_root.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return payload
+
+
+def pairwise_cmvn_distance(pairwise: dict[str, Any], source_phone: str, generated_phone: str) -> float | None:
+    """Read a pairwise CMVN distance from the cache using normalized ARPABET keys."""
+    source = strip_cmudict_stress(source_phone)
+    generated = strip_cmudict_stress(generated_phone)
+    distances = pairwise.get("distances") or {}
+    value = (distances.get(source) or {}).get(generated)
+    if value is None:
+        return None
+    return float(value)
+
+
 def crossfade_concat(segments: list[np.ndarray], *, sample_rate: int, gap_ms: float, crossfade_ms: float) -> np.ndarray:
     """Concatenate phone clips with a small gap/crossfade to reduce clicks."""
     if not segments:
@@ -849,6 +974,26 @@ def parse_voices(value: str | None) -> tuple[str, ...]:
     if not voices:
         raise ValueError("Voice list cannot be empty.")
     return voices
+
+
+def parse_int_values(value: str) -> list[int]:
+    """Parse comma-separated integers and inclusive ranges such as 1,3-5."""
+    out: list[int] = []
+    for part in str(value).split(","):
+        token = part.strip()
+        if not token:
+            continue
+        if "-" in token:
+            start_s, end_s = token.split("-", 1)
+            start = int(start_s.strip())
+            end = int(end_s.strip())
+            step = 1 if end >= start else -1
+            out.extend(range(start, end + step, step))
+        else:
+            out.append(int(token))
+    if not out:
+        raise ValueError(f"No integer values parsed from {value!r}")
+    return out
 
 
 def render_args_for_voice(args: argparse.Namespace, voice_mode: str) -> SimpleNamespace:
@@ -1073,28 +1218,244 @@ def pregenerate_assets(args: argparse.Namespace) -> list[dict[str, Any]]:
     return payloads
 
 
+def per_phoneme_library_json_path(output_root: str | Path, voice_mode: str, word: str) -> Path:
+    """Resolve the pregenerated per-phoneme library JSON for one voice/word."""
+    return Path(output_root) / normalize_voice_mode(voice_mode) / word.strip().lower() / f"{word.strip().lower()}_per_phoneme_assets.json"
+
+
+def load_per_phoneme_assets(path: str | Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    assets = payload.get("assets")
+    if not isinstance(assets, list) and isinstance(payload.get("library"), dict):
+        assets = payload["library"].get("assets")
+    if not isinstance(assets, list):
+        raise ValueError(f"Per-phoneme library does not contain an assets list: {path}")
+    return assets, payload
+
+
+def asset_audio_exists(asset: dict[str, Any]) -> bool:
+    audio = asset_audio_path(asset)
+    return bool(audio) and Path(str(audio)).is_file()
+
+
+def per_phoneme_library_needs_generation(path: Path, *, require_audio: bool) -> bool:
+    if not path.is_file():
+        return True
+    if not require_audio:
+        return False
+    try:
+        assets, _payload = load_per_phoneme_assets(path)
+    except Exception:
+        return True
+    return not assets or any(not asset_audio_exists(asset) for asset in assets)
+
+
+def ensure_per_phoneme_libraries(args: argparse.Namespace) -> list[dict[str, Any]]:
+    """Generate the full configured vocab/voice asset grid when any library is missing."""
+    output_root = Path(args.output_root)
+    require_audio = bool(args.render_audio and not args.metadata_only)
+    missing = [
+        per_phoneme_library_json_path(output_root, voice, word)
+        for voice in parse_voices(args.voices)
+        for word in parse_words(args.words)
+        if per_phoneme_library_needs_generation(
+            per_phoneme_library_json_path(output_root, voice, word),
+            require_audio=require_audio,
+        )
+    ]
+    if not missing:
+        return []
+    print(
+        f"Generating per-phoneme libraries for {len(parse_voices(args.voices))} voices "
+        f"and {len(parse_words(args.words))} words under {output_root}"
+    )
+    return pregenerate_assets(args)
+
+
+def ensure_cmvn_pairwise_cache(args: argparse.Namespace) -> dict[str, Any]:
+    return load_or_create_cmvn_pairwise_distances(
+        Path(args.phone_inventory_root),
+        rebuild=bool(args.rebuild_cmvn_pairwise),
+    )
+
+
+def vector_mse(left: list[float], right: list[float]) -> float:
+    if len(left) != len(right):
+        return float("inf")
+    if not left:
+        return 0.0
+    return sum((float(a) - float(b)) ** 2 for a, b in zip(left, right)) / len(left)
+
+
+def per_phoneme_target_signal(
+    *,
+    comparison: dict[str, Any] | None,
+    preview_signal: str | None,
+    phone_count: int,
+) -> tuple[list[float], str]:
+    if preview_signal is not None:
+        return preview_targets_for_phone_count(parse_distance_signal(preview_signal), phone_count), "preview_signal"
+    if comparison is None:
+        raise ValueError("comparison is required when --preview-signal is not provided")
+    return per_phoneme_eeg_targets(comparison, phone_count), "template_probe_comparison"
+
+
+def select_per_phoneme_asset_from_library(
+    *,
+    word: str,
+    requested_voice: str,
+    output_root: str | Path,
+    comparison: dict[str, Any] | None = None,
+    preview_signal: str | None = None,
+    top_k: int = TOP_K_DEBUG,
+) -> dict[str, Any]:
+    word = word.strip().lower()
+    voice_mode = normalize_voice_mode(requested_voice)
+    canonical = resolve_preview_phones(word)
+    target_signal, target_source = per_phoneme_target_signal(
+        comparison=comparison,
+        preview_signal=preview_signal,
+        phone_count=len(canonical),
+    )
+    library_path = per_phoneme_library_json_path(output_root, voice_mode, word)
+    assets, _payload = load_per_phoneme_assets(library_path)
+
+    ranked: list[dict[str, Any]] = []
+    for asset in assets:
+        distance_tuple = [float(v) for v in asset.get("distance_tuple") or []]
+        actual_distances = [float(v) for v in asset.get("actual_phone_distances") or []]
+        if len(distance_tuple) != len(target_signal):
+            continue
+        tuple_mse = vector_mse(distance_tuple, target_signal)
+        actual_mse = vector_mse(actual_distances, target_signal)
+        ranked.append(
+            {
+                "asset": asset,
+                "score": -tuple_mse,
+                "score_details": {
+                    "selection_metric": "distance_tuple_mse",
+                    "distance_tuple_mse": tuple_mse,
+                    "actual_phone_distance_mse": actual_mse,
+                    "target_signal_source": target_source,
+                },
+            }
+        )
+
+    if not ranked:
+        raise ValueError(f"No per-phoneme assets matched word='{word}' voice='{voice_mode}' and target length={len(target_signal)}.")
+
+    ranked.sort(
+        key=lambda row: (
+            row["score_details"]["distance_tuple_mse"],
+            row["score_details"]["actual_phone_distance_mse"],
+            str(row["asset"].get("asset_id") or ""),
+        )
+    )
+    best = ranked[0]
+    asset = best["asset"]
+    return {
+        "word": word,
+        "voice_mode": voice_mode,
+        "generation_mode": "per_phoneme_grid",
+        "library_json": str(library_path),
+        "audio_path": asset_audio_path(asset),
+        "asset_id": asset.get("asset_id"),
+        "target_signal": target_signal,
+        "target_signal_source": target_source,
+        "requested_generation_signature": target_signal,
+        "selected_phoneme_grades": asset.get("distance_tuple"),
+        "actual_phone_distances": asset.get("actual_phone_distances"),
+        "score": best["score"],
+        "score_details": best["score_details"],
+        "asset_metadata": asset,
+        "top_candidates": [
+            {
+                "asset_id": row["asset"].get("asset_id"),
+                "candidate_text": row["asset"].get("candidate_text"),
+                "distance_tuple": row["asset"].get("distance_tuple"),
+                "actual_phone_distances": row["asset"].get("actual_phone_distances"),
+                "audio_path": asset_audio_path(row["asset"]),
+                "score": row["score"],
+                "score_details": row["score_details"],
+            }
+            for row in ranked[:max(1, int(top_k))]
+        ],
+        "times": list(comparison.get("times", [])) if comparison else [],
+        "per_time_l2": list(comparison.get("per_time_l2", [])) if comparison else [],
+    }
+
+
+def build_default_comparison(args: argparse.Namespace) -> dict[str, Any]:
+    """Mirror my_test.py: build a template, load one probe trial, then compare."""
+    template_object = build_template_from_dataset(
+        template_days=parse_int_values(args.template_days),
+        template_sessions=parse_int_values(args.template_sessions),
+        nperseg=args.nperseg,
+        noverlap=args.noverlap,
+        eps=args.eps,
+        fmax=args.fmax,
+    )
+    trial, label_name, dataset = get_one_trial_from_dataset(
+        day=args.probe_day,
+        sess=args.probe_session,
+        label=args.label,
+        trial_index_within_label=args.trial_index,
+    )
+    print("Loaded trial label:", label_name)
+    result = compare_signal_to_prebuilt_template(
+        template_object=template_object,
+        input_signal=trial,
+        input_label=args.label,
+        output_mode="both",
+        sr=getattr(dataset, "final_sampling_rate", args.sr),
+    )
+    return adapt_comparison_result(result)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run cmudict per-phoneme EEG/CMVN candidate selection.")
     parser.add_argument("--preview", action="store_true", help="Preview all built-in vocab words with a synthetic distance signal.")
     parser.add_argument("--pregenerate-assets", action="store_true", help="Generate a full per-phoneme asset grid for the vocab.")
-    parser.add_argument("--preview-signal", default="0.1,0.3,0.6,0.9", help="Comma-separated direct distance signal for --preview.")
+    parser.add_argument(
+        "--preview-signal",
+        default=None,
+        help="Comma-separated direct distance signal. In normal selection mode, --word is required when this is provided.",
+    )
     parser.add_argument("--granularity", type=int, default=2, help="Number of distance options per phoneme for --pregenerate-assets.")
-    parser.add_argument("--output-root", default="per-phoneme", help="Parent directory for --pregenerate-assets output.")
+    parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT, help="Parent directory for per-phoneme asset libraries.")
     parser.add_argument("--voices", default="man,woman", help="Comma-separated voice modes for --pregenerate-assets.")
     parser.add_argument("--words", default=",".join(PREVIEW_WORDS), help="Comma-separated words for --pregenerate-assets.")
     parser.add_argument("--render-audio", action="store_true", help="Render WAVs while pre-generating assets.")
-    parser.add_argument("--render-audio-source", choices=["tts", "phone-stitch"], default="tts", help="Audio source for --render-audio during --pregenerate-assets.")
-    parser.add_argument("--phone-inventory-root", default=DEFAULT_PHONE_INVENTORY_ROOT, help="Flat MP3/WAV isolated-phone inventory for --render-audio-source phone-stitch.")
+    parser.add_argument("--render-audio-source",
+                        choices=["tts", "phone-stitch"],
+                        default="phone-stitch",
+                        help="Audio source for --render-audio during "\
+                        "--pregenerate-assets.")
+    parser.add_argument("--phone-inventory-root", 
+                        default=DEFAULT_PHONE_INVENTORY_ROOT,
+                        help="Flat MP3/WAV isolated-phone inventory for "\
+                        "--render-audio-source phone-stitch.")
     parser.add_argument("--phone-gap-ms", type=float, default=20.0, help="Silence gap between stitched phone assets.")
     parser.add_argument("--phone-crossfade-ms", type=float, default=5.0, help="Crossfade between stitched phone assets.")
     parser.add_argument("--metadata-only", action="store_true", help="Write JSON metadata and WAV paths without rendering audio.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing WAVs during --render-audio.")
     parser.add_argument("--word", default=None)
     parser.add_argument("--comparison-json", default=None, help="JSON file containing at least per_time_l2 and optionally times.")
-    parser.add_argument("--library-json", default=None, help="Blabber/triphone asset library JSON.")
-    parser.add_argument("--requested-voice", default="female", choices=["female", "male", "woman", "man"])
+    parser.add_argument("--requested-voice", default=DEFAULT_REQUESTED_VOICE, choices=["female", "male", "woman", "man"], help="Requested per-phoneme voice bank.")
+    parser.add_argument("--rebuild-cmvn-pairwise", action="store_true", help="Recompute the phone-inventory CMVN pairwise cache.")
     parser.add_argument("--json-out", default=None)
     parser.add_argument("--cmvn-phone-max-threshold", type=float, default=CMVN_PHONE_MAX_THRESHOLD)
+    parser.add_argument("--template-days", default="1", help="Comma-separated days/ranges for template building, e.g. 1 or 1-3.")
+    parser.add_argument("--template-sessions", default="1-2", help="Comma-separated sessions/ranges for template building.")
+    parser.add_argument("--probe-day", type=int, default=1)
+    parser.add_argument("--probe-session", type=int, default=8)
+    parser.add_argument("--label", type=int, default=4)
+    parser.add_argument("--trial-index", type=int, default=0)
+    parser.add_argument("--sr", type=int, default=250)
+    parser.add_argument("--nperseg", type=int, default=128)
+    parser.add_argument("--noverlap", type=int, default=96)
+    parser.add_argument("--eps", type=float, default=1e-8)
+    parser.add_argument("--fmax", type=float, default=50)
     parser.add_argument("--tts-engine", choices=["kokoro", "edge", "piper", "coqui"], default="coqui")
     parser.add_argument("--kokoro-lang-code", type=str, default="b")
     parser.add_argument("--kokoro-speed", type=float, default=1.0)
@@ -1119,9 +1480,13 @@ def main() -> None:
     parser.add_argument("--allow-overlong", action="store_true")
     args = parser.parse_args()
 
+    output_root = str(
+        Path(args.output_root)/Path(f"granularity_{args.granularity}")
+    )
+
     if args.preview:
         rows = preview_rows(
-            distance_signal=parse_distance_signal(args.preview_signal),
+            distance_signal=parse_distance_signal(args.preview_signal or "0.1,0.3,0.6,0.9"),
             cmvn_phone_max_threshold=args.cmvn_phone_max_threshold,
         )
         if args.json_out:
@@ -1133,10 +1498,10 @@ def main() -> None:
     if args.pregenerate_assets:
         payloads = pregenerate_assets(args)
         summary = {
-            "output_root": str(Path(args.output_root)),
+            "output_root": output_root,
             "voice_count": len(parse_voices(args.voices)),
             "word_count": len(parse_words(args.words)),
-            "library_count": len(payloads),
+            "payload_count": len(payloads),
             "asset_count": sum(int(payload["asset_count"]) for payload in payloads),
             "render_audio": bool(args.render_audio and not args.metadata_only),
             "render_audio_source": args.render_audio_source,
@@ -1150,22 +1515,39 @@ def main() -> None:
             print(json.dumps(summary, indent=2, default=str))
         return
 
-    if not args.word or not args.comparison_json or not args.library_json:
-        parser.error("--word, --comparison-json, and --library-json are required unless --preview or --pregenerate-assets is set.")
+    args.render_audio = bool(args.render_audio or not args.metadata_only)
+    args.render_audio_source = "phone-stitch"
 
-    comparison = json.loads(Path(args.comparison_json).read_text(encoding="utf-8"))
-    assets, _payload = load_assets(Path(args.library_json))
-    canonical = resolve_cmudict_phones(args.word)
-    result = select_dynamic_phoneme_candidate(
-        word=args.word.strip().lower(),
-        canonical=canonical,
+    pairwise_distances = ensure_cmvn_pairwise_cache(args)
+    ensure_per_phoneme_libraries(args)
+
+    comparison: dict[str, Any] | None = None
+    if args.preview_signal is not None:
+        if not args.word:
+            parser.error("--word is required when --preview-signal is used for normal selection.")
+        word = args.word.strip().lower()
+    elif args.comparison_json:
+        comparison = json.loads(Path(args.comparison_json).read_text(encoding="utf-8"))
+        word = str(args.word or comparison.get("label_name") or "").strip().lower()
+        if not word:
+            parser.error("--comparison-json must include label_name, or pass --word.")
+    else:
+        comparison = build_default_comparison(args)
+        word = str(args.word or comparison.get("label_name") or "").strip().lower()
+
+    if word not in parse_words(args.words):
+        raise ValueError(f"Selected word '{word}' is not included in --words={args.words!r}; cannot guarantee its library exists.")
+
+    result = select_per_phoneme_asset_from_library(
+        word=word,
+        requested_voice=args.requested_voice,
+        output_root=output_root,
         comparison=comparison,
-        assets=assets,
-        voice_mode=normalize_voice_mode(args.requested_voice),
-        cmvn_phone_max_threshold=args.cmvn_phone_max_threshold,
+        preview_signal=args.preview_signal,
+        top_k=TOP_K_DEBUG,
     )
-    if result is None:
-        raise RuntimeError("No reference asset was available for per-phoneme CMVN scoring.")
+    result["cmvn_pairwise_distances_path"] = str(cmvn_pairwise_cache_path(Path(args.phone_inventory_root)))
+    result["cmvn_pairwise_phone_count"] = len(pairwise_distances.get("phones") or [])
 
     payload = json.dumps(result, indent=2, default=str)
     if args.json_out:
