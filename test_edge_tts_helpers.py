@@ -157,11 +157,11 @@ class EdgeTTSHelperTests(unittest.TestCase):
         self.assertEqual(selected["generated_phones"][1:], ["EH", "S"])
         self.assertEqual(selected["score_details"]["distance_metric"], "articulatory_fallback")
 
-    def test_preview_targets_use_half_average_for_two_phones(self):
-        self.assertEqual(preview_targets_for_phone_count([0.1, 0.3, 0.6, 0.9], 2), [0.2, 0.75])
+    def test_preview_targets_use_max_for_two_phone_bins(self):
+        self.assertEqual(preview_targets_for_phone_count([0.1, 0.3, 0.6, 0.9], 2), [0.3, 0.9])
 
-    def test_preview_targets_use_overlapping_pair_average_for_three_phones(self):
-        self.assertTrue(np.allclose(preview_targets_for_phone_count([0.1, 0.3, 0.6, 0.9], 3), [0.2, 0.45, 0.75]))
+    def test_preview_targets_use_max_for_three_phone_bins(self):
+        self.assertTrue(np.allclose(preview_targets_for_phone_count([0.1, 0.3, 0.6, 0.9], 3), [0.3, 0.6, 0.9]))
 
     def test_preview_rows_covers_full_vocab(self):
         rows = preview_rows(distance_signal=[0.1, 0.3, 0.6, 0.9])

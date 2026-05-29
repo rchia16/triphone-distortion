@@ -52,7 +52,7 @@ def first_segment_bounds(
     audio: np.ndarray,
     sample_rate: int,
     *,
-    threshold_ratio: float,
+    threshold_db: float,
     min_segment_ms: float,
     max_internal_silence_ms: float,
     pad_ms: float,
@@ -62,11 +62,7 @@ def first_segment_bounds(
         return 0, 0
 
     envelope = smooth_envelope(audio, sample_rate, envelope_window_ms)
-    peak = float(np.max(envelope)) if envelope.size else 0.0
-    if peak <= 0.0:
-        return 0, min(audio.size, max(1, int(round(sample_rate * min_segment_ms / 1000.0))))
-
-    threshold = peak * float(threshold_ratio)
+    threshold = float(10.0 ** (threshold_db / 20.0))
     active = envelope >= threshold
     min_len = max(1, int(round(sample_rate * min_segment_ms / 1000.0)))
     silence_bridge = max(0, int(round(sample_rate * max_internal_silence_ms / 1000.0)))
@@ -94,35 +90,54 @@ def first_segment_bounds(
     return max(0, start - pad), min(audio.size, end + pad)
 
 
-def clean_file(path: Path, output_dir: Path, args: argparse.Namespace) -> dict:
+def prepare_cleaned_file(path: Path, output_dir: Path, args: argparse.Namespace) -> tuple[dict, np.ndarray]:
     audio, sample_rate = load_mono(path)
     start, end = first_segment_bounds(
         audio,
         sample_rate,
-        threshold_ratio=args.threshold_ratio,
+        threshold_db=args.threshold_db,
         min_segment_ms=args.min_segment_ms,
         max_internal_silence_ms=args.max_internal_silence_ms,
         pad_ms=args.pad_ms,
         envelope_window_ms=args.envelope_window_ms,
     )
+    cleaned_audio = audio[start:end]
+    peak_amplitude = float(np.max(np.abs(cleaned_audio))) if cleaned_audio.size else 0.0
 
     output_path = output_dir / f"{path.stem}.wav"
-    if output_path.exists() and not args.overwrite:
-        status = "exists"
-    else:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        sf.write(str(output_path), audio[start:end], sample_rate, subtype="PCM_16")
-        status = "ok"
-
-    return {
+    metadata = {
         "input": str(path),
         "output": str(output_path),
-        "status": status,
         "sample_rate": sample_rate,
         "start_sec": start / sample_rate if sample_rate else 0.0,
         "end_sec": end / sample_rate if sample_rate else 0.0,
         "duration_sec": (end - start) / sample_rate if sample_rate else 0.0,
+        "peak_amplitude": peak_amplitude,
     }
+    return metadata, cleaned_audio
+
+
+def write_cleaned_file(asset: dict, cleaned_audio: np.ndarray, target_peak: float, overwrite: bool) -> dict:
+    output_path = Path(asset["output"])
+    peak_amplitude = float(asset["peak_amplitude"])
+    gain = target_peak / peak_amplitude if peak_amplitude > 0.0 and target_peak > 0.0 else 1.0
+
+    if output_path.exists() and not overwrite:
+        status = "exists"
+    else:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        sf.write(
+            str(output_path),
+            cleaned_audio * np.float32(gain),
+            int(asset["sample_rate"]),
+            subtype="PCM_16",
+        )
+        status = "ok"
+
+    asset["status"] = status
+    asset["normalization_gain"] = gain
+    asset["target_peak_amplitude"] = target_peak
+    return asset
 
 
 def iter_audio_files(input_dir: Path) -> list[Path]:
@@ -137,9 +152,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Crop Australian phone assets to their first non-silent segment.")
     parser.add_argument("--input-dir", type=Path, default=DEFAULT_INPUT_DIR)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--threshold-ratio", type=float, default=0.08)
+    parser.add_argument("--threshold-db", type=float, default=-50.0)
     parser.add_argument("--min-segment-ms", type=float, default=80.0)
-    parser.add_argument("--max-internal-silence-ms", type=float, default=120.0)
+    parser.add_argument("--max-internal-silence-ms", type=float, default=200.0)
     parser.add_argument("--pad-ms", type=float, default=25.0)
     parser.add_argument("--envelope-window-ms", type=float, default=10.0)
     parser.add_argument("--overwrite", action="store_true")
@@ -147,13 +162,34 @@ def main() -> None:
     args = parser.parse_args()
 
     files = iter_audio_files(args.input_dir)
-    results = [clean_file(path, args.output_dir, args) for path in files]
+    prepared_assets = [prepare_cleaned_file(path, args.output_dir, args) for path in files]
+
+    loudest_so_far = 0.0
+    loudness_history = []
+    for asset, _cleaned_audio in prepared_assets:
+        loudest_so_far = max(loudest_so_far, float(asset["peak_amplitude"]))
+        asset["loudest_amplitude_so_far"] = loudest_so_far
+        loudness_history.append(
+            {
+                "input": asset["input"],
+                "peak_amplitude": asset["peak_amplitude"],
+                "loudest_amplitude_so_far": loudest_so_far,
+            }
+        )
+
+    target_peak = loudest_so_far
+    results = [
+        write_cleaned_file(asset, cleaned_audio, target_peak, args.overwrite)
+        for asset, cleaned_audio in prepared_assets
+    ]
     manifest = {
         "input_dir": str(args.input_dir),
         "output_dir": str(args.output_dir),
         "asset_count": len(results),
+        "loudest_amplitude": target_peak,
+        "loudness_history": loudness_history,
         "settings": {
-            "threshold_ratio": args.threshold_ratio,
+            "threshold_db": args.threshold_db,
             "min_segment_ms": args.min_segment_ms,
             "max_internal_silence_ms": args.max_internal_silence_ms,
             "pad_ms": args.pad_ms,
