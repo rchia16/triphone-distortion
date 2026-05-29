@@ -41,8 +41,10 @@ import wave
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from glob import glob
 
 import numpy as np
+import pandas as pd
 
 INPUT_RE = re.compile(r"^(?P<word>[A-Za-z][A-Za-z0-9-]*)_(?P<batch>\d+)\.wav$", re.IGNORECASE)
 
@@ -57,8 +59,14 @@ DISTANCE_KEYS = (
     "distance", "dist", "distortion", "score", "total_distance", "weighted_distance",
     "normalized_distance", "norm_distance", "norm_dist", "d",
 )
+PHONE_DISTANCE_KEYS = ("phone_distance", "phoneme_distance", "mean_phone_distance")
 LIST_KEYS = ("candidates", "scored", "results", "items", "entries", "variants", "rows", "data")
 
+PARENT_DIR = "/data/raqchia/audio-assets/"
+ORIGINAL_ASSETS = f"{PARENT_DIR}/speech-assets-triphone/man/triphone/"
+# RAY_ASSET_DIR = Path(f"{PARENT_DIR}/RayAssets/")
+RAY_ASSET_DIR = Path(f"{PARENT_DIR}/RayAssets/")
+ORIGINAL_VOICE = "piper"
 
 @dataclass
 class Segment:
@@ -86,8 +94,23 @@ class Candidate:
     json_order: int
     original_index: Optional[int]
     output_index: Optional[int] = None
+    output_level: Optional[str] = None
     raw: Optional[Dict[str, Any]] = None
 
+@dataclass
+class SignalConfig:
+    max_chunks_per_file:int=10
+    threshold_db:int=-35
+    noise_percentile:float=20.0
+    above_noise_db:float=18.0
+    min_auto_db:float=-45.0
+    max_auto_db:float=-35
+    frame_ms:float=25.0
+    hop_ms:float=10.0
+    merge_gap_ms:float=180.0
+    min_speech_ms:float=250.0
+    pad_ms:float=120.0
+    peak_normalize_dbfs:float=None
 
 def dbfs(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     return 20.0 * np.log10(np.maximum(x, eps))
@@ -292,6 +315,10 @@ def peak_normalize(data: np.ndarray, sampwidth: int, target_dbfs: Optional[float
 
 def iter_input_wavs(input_paths: Sequence[Path]) -> List[InputWav]:
     found: List[Path] = []
+
+    if not isinstance(input_paths, list):
+        input_paths = [input_paths]
+
     for p in input_paths:
         if p.is_dir():
             found.extend(sorted(p.glob("*.wav")))
@@ -373,6 +400,26 @@ def coerce_int(value: Any) -> Optional[int]:
             if m:
                 return int(m.group(0))
         return None
+
+
+def parse_asset_path_fields(row: Dict[str, Any], bins: int) -> Tuple[Optional[str], Optional[int]]:
+    value = first_present(row, ("wav_path", "audio_path", "output_audio_path", "file", "filename", "path", "output"))
+    if value is None:
+        return None, None
+    path = Path(str(value))
+    level: Optional[str] = None
+    for part in path.parts:
+        if part.startswith("level_"):
+            try:
+                level = normalize_level(part, bins)
+            except ValueError:
+                level = None
+            break
+    index: Optional[int] = None
+    m = re.match(r"(\d+)_", path.name)
+    if m:
+        index = int(m.group(1))
+    return level, index
 
 
 def extract_list_from_json(obj: Any) -> List[Any]:
@@ -496,6 +543,7 @@ def load_candidates(
             lvl = distance_to_level(norm_dist, bins, bin_assignment)
         else:
             raise ValueError(f"Candidate row {j} in {scored_path} has neither level nor distance")
+        path_level, path_index = parse_asset_path_fields(row, bins)
 
         candidates.append(Candidate(
             source_word=word,
@@ -504,6 +552,8 @@ def load_candidates(
             distance=norm_dist,
             json_order=j,
             original_index=coerce_int(first_present(row, INDEX_KEYS)),
+            output_index=path_index,
+            output_level=path_level,
             raw=row,
         ))
 
@@ -519,23 +569,29 @@ def load_candidates(
     # run_full_lexicon style names use a zero-based sequence within each level folder.
     counters: Dict[str, int] = {}
     for c in candidates:
-        if c.original_index is not None and order == "json_keep_index":
+        if c.output_index is not None:
+            pass
+        elif c.original_index is not None and order == "json_keep_index":
             c.output_index = c.original_index
         else:
-            c.output_index = counters.get(c.level, 0)
-            counters[c.level] = c.output_index + 1
+            output_level = c.output_level or c.level
+            c.output_index = counters.get(output_level, 0)
+            counters[output_level] = c.output_index + 1
+        if c.output_level is None:
+            c.output_level = c.level
     return candidates
 
 
 def format_output_path(template: str, out_root: Path, word: str, candidate: Candidate, suffix: str) -> Path:
     idx = 0 if candidate.output_index is None else candidate.output_index
+    level = candidate.output_level or candidate.level
     fields = {
         "out_root": str(out_root),
         "word": word,
         "source_word": word,
         "candidate": candidate.candidate,
         "variant": candidate.candidate,
-        "level": candidate.level,
+        "level": level,
         "index": idx,
         "idx": idx,
         "suffix": suffix,
@@ -551,12 +607,46 @@ def create_all_level_dirs(out_root: Path, words: Iterable[str], bins: int) -> No
 
 def candidate_key(candidate: Candidate) -> Tuple[int, str, int]:
     idx = -1 if candidate.output_index is None else candidate.output_index
-    return candidate.json_order, candidate.level, idx
+    return candidate.json_order, candidate.output_level or candidate.level, idx
 
 
-def representative_candidates(candidates: Sequence[Candidate], level: str) -> List[Candidate]:
-    reps = [c for c in candidates if c.level == level]
-    return reps or list(candidates)
+def raw_float(candidate: Candidate, keys: Iterable[str]) -> Optional[float]:
+    if candidate.raw is None:
+        return None
+    return coerce_float(first_present(candidate.raw, keys))
+
+
+def wav_index(candidate: Candidate) -> Optional[int]:
+    if candidate.raw is None:
+        return None
+    value = first_present(candidate.raw, ("wav_path", "audio_path", "output_audio_path", "file", "filename", "path", "output"))
+    if value is None:
+        return None
+    m = re.match(r"(\d+)_", Path(str(value)).name)
+    return int(m.group(1)) if m else None
+
+
+def representative_sort_key(candidate: Candidate, order: str) -> Tuple[float, int, str, int]:
+    phone_distance = raw_float(candidate, PHONE_DISTANCE_KEYS)
+    idx = wav_index(candidate)
+    if order == "augmentation":
+        primary = 0.0 if phone_distance is None else phone_distance
+        secondary = 10**9 if idx is None else idx
+    elif order == "wav_index":
+        primary = 10**9 if idx is None else float(idx)
+        secondary = candidate.json_order
+    elif order == "json":
+        primary = float(candidate.json_order)
+        secondary = 0
+    else:
+        raise ValueError(f"Unsupported representative order: {order}")
+    return primary, secondary, candidate.candidate, candidate.json_order
+
+
+def representative_candidates(candidates: Sequence[Candidate], level: str, order: str) -> List[Candidate]:
+    reps = [c for c in candidates if (c.output_level or c.level) == level]
+    reps = reps or list(candidates)
+    return sorted(reps, key=lambda c: representative_sort_key(c, order))
 
 
 def candidates_by_text(candidates: Sequence[Candidate]) -> Dict[str, List[Candidate]]:
@@ -568,10 +658,17 @@ def candidates_by_text(candidates: Sequence[Candidate]) -> Dict[str, List[Candid
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="Chunk spoken blabber batches into run_full_lexicon-style WAV assets.")
-    ap.add_argument("inputs", nargs="+", type=Path, help="Input WAV files or directories containing {word}_NN.wav")
-    ap.add_argument("--out-root", type=Path, required=True, help="Output root directory")
-    ap.add_argument("--scored-root", type=Path, default=None, help="Root that contains {word}/scored.json from run_full_lexicon_blabber.sh")
-    ap.add_argument("--scored-json-name", default="blabber_scored.json")
+    ap.add_argument(
+        "--out-root", type=Path,
+        default=ORIGINAL_ASSETS,
+        help="Output root directory"
+    )
+    ap.add_argument(
+        "--scored-root", type=Path,
+        default=Path(f"{PARENT_DIR}/speech-assets-triphone/man/triphone/"),
+        help="Root that contains {word}/scored.json from run_full_lexicon_blabber.sh"
+    )
+    # ap.add_argument("--scored-json-name", default="blabber_scored.json")
     ap.add_argument("--bins", type=int, default=8, help="Number of level bins. 8 gives 0.00, 0.14, ..., 1.00")
     ap.add_argument("--candidate-order", choices=("distance", "level_distance", "json"), default="distance")
     ap.add_argument(
@@ -589,37 +686,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=None,
         help="Level whose candidates correspond to spoken chunks in text mode. Default: highest bin, e.g. 1.00.",
     )
+    ap.add_argument(
+        "--representative-order",
+        choices=("augmentation", "wav_index", "json"),
+        default="wav_index",
+        help=(
+            "Order used to consume representative-level chunks in text mode. "
+            "'wav_index' follows the original generated asset filenames, e.g. 0021_L1.00_nuh."
+        ),
+    )
+    ap.add_argument("--suffix", type=str, default="en-AU-Ray")
     ap.add_argument("--bin-assignment", choices=("nearest", "floor", "ceil"), default="nearest")
     ap.add_argument("--allow-missing-scored", action="store_true", help="Fallback to legacy naming when scored.json is absent")
     ap.add_argument("--output-template", default="{out_root}/{word}/level_{level}/{index:04d}_L{level}_{candidate}_{suffix}.wav")
     ap.add_argument("--legacy-output-template", default="{out_root}/{word}/level_1.00/{word}_{index:03d}_{suffix}.wav")
-    ap.add_argument("--suffix", default="en-AU-Ray")
-    ap.add_argument("--max-chunks-per-file", type=int, default=10)
-    ap.add_argument("--threshold-db", type=float, default=None,
-                    help="Manual speech threshold in dBFS, e.g. -35")
-    ap.add_argument("--noise-percentile", type=float, default=20.0)
-    ap.add_argument("--above-noise-db", type=float, default=18.0)
-    ap.add_argument("--min-auto-db", type=float, default=-45.0)
-    ap.add_argument("--max-auto-db", type=float, default=-35.0)
-    ap.add_argument("--frame-ms", type=float, default=25.0)
-    ap.add_argument("--hop-ms", type=float, default=10.0)
-    ap.add_argument("--merge-gap-ms", type=float, default=180.0)
-    ap.add_argument("--min-speech-ms", type=float, default=250.0)
-    ap.add_argument("--pad-ms", type=float, default=120.0)
-    ap.add_argument("--peak-normalize-dbfs", type=float, default=None, help="Optional peak normalization target, e.g. -3")
-    ap.add_argument("--create-level-dirs", action="store_true", help="Create all level_XX dirs for every word before writing chunks")
     ap.add_argument("--dry-run", action="store_true", help="Detect and print chunks without writing WAVs")
     ap.add_argument("--metadata", type=Path, default=None, help="CSV metadata path. Default: {out_root}/chunk_metadata.csv")
     args = ap.parse_args(argv)
 
-    wavs = iter_input_wavs(args.inputs)
+    wavs = iter_input_wavs(RAY_ASSET_DIR)
     if not wavs:
         raise SystemExit("No matching input WAV files found.")
 
+    signal_cfg = SignalConfig()
+
     words = sorted(set(w.word for w in wavs))
-    if args.create_level_dirs and not args.dry_run:
+    if not args.dry_run:
         create_all_level_dirs(args.out_root, words, args.bins)
 
+    """
     candidates_by_word: Dict[str, List[Candidate]] = {}
     for word in words:
         scored = find_scored_json(word, wavs, args.out_root, args.scored_root, args.scored_json_name)
@@ -635,22 +730,77 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             cands = load_candidates(word, scored, args.bins, args.candidate_order, args.bin_assignment)
             candidates_by_word[word] = cands
             print(f"{word}: loaded {len(cands)} candidates from {scored}")
+    """
+
+    # from the previously output triphone dataset, get the names across levels
+    # with transcript and index
+    word_cfg_dicts = []
+    for word in words:
+        word_glob = glob(ORIGINAL_ASSETS + f"/{word}/**/*{ORIGINAL_VOICE}.wav")
+        for wav_fname in word_glob:
+            # split by level, index, and word
+            fname_path = Path(wav_fname)
+            level_dir = fname_path.parts[-2]
+            fname = fname_path.parts[-1]
+            index, level, aug_word, speaker = fname.split("_")
+            tmp = "_".join([index, level, aug_word, args.suffix]) + '.wav'
+            new_fname = args.out_root / Path(word) / Path(level_dir) / Path(tmp)
+            word_cfg_dict = {
+                'word': word,
+                'aug_word': aug_word,
+                'level_dir': level_dir,
+                'level': level,
+                'index': index,
+                'original_fname': fname_path,
+                'new_audio': np.nan,
+                'new_fname': new_fname,
+            }
+            word_cfg_dicts.append(word_cfg_dict)
+
+    all_aug_df = pd.DataFrame(word_cfg_dicts)
+    lvl_standard = 'L1.00'
+    # FIXME this needs to be patched to read the string and the line is the
+    # index, search by string rather than by index
+    # with open("my_transcript.txt", 'r') as f:
+    #     my_transcript = f.read()
+    # TODO map new line as index to string
+
+    transcript_dict = {}
+    for word in words:
+        df_lvl = all_aug_df[
+            (
+                (all_aug_df['level']==lvl_standard) & \
+                (all_aug_df['word']==word) 
+            )
+        ].copy()
+        df0 = all_aug_df[(all_aug_df['level']=='L0.00') & \
+                         (all_aug_df['word']==word)].copy()
+        df_lvl['idx_int'] = df_lvl['index'].map(lambda x: int(x))
+        df0['idx_int'] = df0['index'].map(lambda x: int(x))
+        df_lvl.sort_values(by='idx_int', ascending=False, inplace=True)
+        df = pd.concat([df0, df_lvl])
+        transcript_dict[word] = df[
+            ['aug_word', 'index', 'new_audio', 'new_fname']
+        ].reset_index(drop=True)
+        print(df)
+        import pdb; pdb.set_trace()
 
     metadata_path = args.metadata or (args.out_root / "chunk_metadata.csv")
-    rows: List[Dict[str, str]] = []
-    next_candidate: Dict[str, int] = {w: 0 for w in words}
-    legacy_next: Dict[str, int] = {w: 0 for w in words}
-    representative_level = args.representative_level or level_labels(args.bins)[-1]
-    reps_by_word: Dict[str, List[Candidate]] = {
-        w: representative_candidates(cands, representative_level)
-        for w, cands in candidates_by_word.items()
-    }
-    by_text_by_word: Dict[str, Dict[str, List[Candidate]]] = {
-        w: candidates_by_text(cands)
-        for w, cands in candidates_by_word.items()
-    }
-    written_candidates: Dict[str, set[Tuple[int, str, int]]] = {w: set() for w in words}
+    # rows: List[Dict[str, str]] = []
+    # next_candidate: Dict[str, int] = {w: 0 for w in words}
+    # legacy_next: Dict[str, int] = {w: 0 for w in words}
+    # representative_level = args.representative_level or level_labels(args.bins)[-1]
+    # reps_by_word: Dict[str, List[Candidate]] = {
+    #     w: representative_candidates(cands, representative_level, args.representative_order)
+    #     for w, cands in candidates_by_word.items()
+    # }
+    # by_text_by_word: Dict[str, Dict[str, List[Candidate]]] = {
+    #     w: candidates_by_text(cands)
+    #     for w, cands in candidates_by_word.items()
+    # }
+    # written_candidates: Dict[str, set[Tuple[int, str, int]]] = {w: set() for w in words}
 
+    transcript_chunk_dict = {}
     for inp in wavs:
         sr, channels, sampwidth, data = read_wav_pcm(inp.path)
         print("processing ", inp.path)
@@ -658,155 +808,180 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             data=data,
             sr=sr,
             sampwidth=sampwidth,
-            frame_ms=args.frame_ms,
-            hop_ms=args.hop_ms,
-            threshold_db=args.threshold_db,
-            noise_percentile=args.noise_percentile,
-            above_noise_db=args.above_noise_db,
-            min_auto_db=args.min_auto_db,
-            max_auto_db=args.max_auto_db,
-            merge_gap_ms=args.merge_gap_ms,
-            min_speech_ms=args.min_speech_ms,
-            pad_ms=args.pad_ms,
-            max_chunks=args.max_chunks_per_file,
+            frame_ms=signal_cfg.frame_ms,
+            hop_ms=signal_cfg.hop_ms,
+            threshold_db=signal_cfg.threshold_db,
+            noise_percentile=signal_cfg.noise_percentile,
+            above_noise_db=signal_cfg.above_noise_db,
+            min_auto_db=signal_cfg.min_auto_db,
+            max_auto_db=signal_cfg.max_auto_db,
+            merge_gap_ms=signal_cfg.merge_gap_ms,
+            min_speech_ms=signal_cfg.min_speech_ms,
+            pad_ms=signal_cfg.pad_ms,
+            max_chunks=signal_cfg.max_chunks_per_file,
         )
 
-        print(f"{inp.path.name}: {len(segments)} chunks, threshold={threshold:.1f} dBFS, noise_p{args.noise_percentile:g}={noise_floor:.1f} dBFS")
-        for local_i, seg in enumerate(segments, start=1):
-            cands = candidates_by_word[inp.word]
-            if cands:
-                if args.candidate_match_mode == "text":
-                    reps = reps_by_word[inp.word]
-                    ci = next_candidate[inp.word]
-                    if ci >= len(reps):
-                        raise SystemExit(
-                            f"Detected more chunks for '{inp.word}' than representative level {representative_level} candidates. "
-                            f"Next chunk would be representative #{ci}, but only {len(reps)} candidates were loaded."
-                        )
-                    rep = reps[ci]
-                    next_candidate[inp.word] += 1
-                    rep_key = candidate_key(rep)
-                    targets = []
-                    if rep_key not in written_candidates[inp.word]:
-                        targets.append(rep)
-                    for cand in by_text_by_word[inp.word].get(rep.candidate, []):
-                        key = candidate_key(cand)
-                        if key != rep_key and key not in written_candidates[inp.word]:
-                            targets.append(cand)
-                    if not targets:
-                        print(
-                            f"  {local_i:02d} -> no unwritten targets for candidate text {rep.candidate!r}; skipping duplicate chunk",
-                            file=sys.stderr,
-                        )
-                        continue
-                else:
-                    ci = next_candidate[inp.word]
-                    if ci >= len(cands):
-                        raise SystemExit(
-                            f"Detected more chunks for '{inp.word}' than candidates in scored.json. "
-                            f"Next chunk would be candidate #{ci}, but only {len(cands)} candidates were loaded."
-                        )
-                    targets = [cands[ci]]
-                    next_candidate[inp.word] += 1
-            else:
-                legacy_next[inp.word] += 1
-                out_index = legacy_next[inp.word]
-                level = "1.00"
-                candidate_text = inp.word
-                distance = ""
-                out_path = Path(args.legacy_output_template.format(
-                    out_root=str(args.out_root), word=inp.word, level=level, index=out_index, idx=out_index,
-                    candidate=candidate_text, variant=candidate_text, suffix=args.suffix,
-                ))
-                chunk = data[seg.start_frame:seg.end_frame].copy()
-                chunk = peak_normalize(chunk, sampwidth, args.peak_normalize_dbfs)
-                print(f"  {local_i:02d} -> {out_path}  [{seg.start_s:.3f}, {seg.end_s:.3f}] {seg.end_s-seg.start_s:.3f}s")
-                if not args.dry_run:
-                    write_wav_pcm(out_path, sr, channels, sampwidth, chunk)
+        file_idx = int(str(inp.path).split("_")[-1][:2])-1
 
-                rows.append({
-                    "input": str(inp.path),
-                    "source_word": inp.word,
-                    "batch": str(inp.batch),
-                    "local_chunk_index": str(local_i),
-                    "candidate_sequence_index": str(out_index),
-                    "output_index": f"{out_index:04d}",
-                    "level": level,
-                    "candidate": candidate_text,
-                    "distance": distance,
-                    "output": str(out_path),
-                    "start_s": f"{seg.start_s:.6f}",
-                    "end_s": f"{seg.end_s:.6f}",
-                    "duration_s": f"{seg.end_s-seg.start_s:.6f}",
-                    "threshold_dbfs": f"{threshold:.3f}",
-                    "noise_floor_dbfs": f"{noise_floor:.3f}",
-                    "peak_dbfs": f"{seg.peak_dbfs:.3f}",
-                    "rms_dbfs": f"{seg.rms_dbfs:.3f}",
-                })
-                continue
+        print(f"{inp.path.name}: {len(segments)} chunks,"\
+              f"threshold={threshold:.1f} dBFS, noise_p{signal_cfg.noise_percentile:g}={noise_floor:.1f} dBFS")
+        for local_i, seg in enumerate(segments, start=1):
+            local_idx = local_i - 1
+            aug_idx = file_idx*10 + local_idx
+            # cands = candidates_by_word[inp.word]
+            # if cands:
+            #     if args.candidate_match_mode == "text":
+            #         reps = reps_by_word[inp.word]
+            #         ci = next_candidate[inp.word]
+            #         if ci >= len(reps):
+            #             print(
+            #                 f"Warning: extra chunk {local_i:02d} for '{inp.word}' has no original level {representative_level} representative. "
+            #                 f"Only {len(reps)} representative files exist; skipping this chunk to avoid string/audio mismatch.",
+            #                 file=sys.stderr,
+            #             )
+            #             next_candidate[inp.word] += 1
+            #             continue
+            #         rep = reps[ci]
+            #         next_candidate[inp.word] += 1
+            #         rep_key = candidate_key(rep)
+            #         targets = []
+            #         if rep_key not in written_candidates[inp.word]:
+            #             targets.append(rep)
+            #         for cand in by_text_by_word[inp.word].get(rep.candidate, []):
+            #             key = candidate_key(cand)
+            #             if key != rep_key and key not in written_candidates[inp.word]:
+            #                 targets.append(cand)
+            #         if not targets:
+            #             print(
+            #                 f"  {local_i:02d} -> no unwritten targets for candidate text {rep.candidate!r}; skipping duplicate chunk",
+            #                 file=sys.stderr,
+            #             )
+            #             continue
+            #     else:
+            #         ci = next_candidate[inp.word]
+            #         if ci >= len(cands):
+            #             raise SystemExit(
+            #                 f"Detected more chunks for '{inp.word}' than candidates in scored.json. "
+            #                 f"Next chunk would be candidate #{ci}, but only {len(cands)} candidates were loaded."
+            #             )
+            #         targets = [cands[ci]]
+            #         next_candidate[inp.word] += 1
+            # else:
+            #     legacy_next[inp.word] += 1
+            #     out_index = legacy_next[inp.word]
+            #     level = "1.00"
+            #     candidate_text = inp.word
+            #     distance = ""
+            #     out_path = Path(args.legacy_output_template.format(
+            #         out_root=str(args.out_root), word=inp.word, level=level, index=out_index, idx=out_index,
+            #         candidate=candidate_text, variant=candidate_text, suffix=args.suffix,
+            #     ))
+            #     chunk = data[seg.start_frame:seg.end_frame].copy()
+            #     chunk = peak_normalize(chunk, sampwidth, signal_cfg.peak_normalize_dbfs)
+            #     print(f"  {local_i:02d} -> {out_path}  [{seg.start_s:.3f}, {seg.end_s:.3f}] {seg.end_s-seg.start_s:.3f}s")
+            #     if not args.dry_run:
+            #         write_wav_pcm(out_path, sr, channels, sampwidth, chunk)
+
+            #     rows.append({
+            #         "input": str(inp.path),
+            #         "source_word": inp.word,
+            #         "batch": str(inp.batch),
+            #         "local_chunk_index": str(local_i),
+            #         "candidate_sequence_index": str(out_index),
+            #         "output_index": f"{out_index:04d}",
+            #         "level": level,
+            #         "candidate": candidate_text,
+            #         "distance": distance,
+            #         "output": str(out_path),
+            #         "start_s": f"{seg.start_s:.6f}",
+            #         "end_s": f"{seg.end_s:.6f}",
+            #         "duration_s": f"{seg.end_s-seg.start_s:.6f}",
+            #         "threshold_dbfs": f"{threshold:.3f}",
+            #         "noise_floor_dbfs": f"{noise_floor:.3f}",
+            #         "peak_dbfs": f"{seg.peak_dbfs:.3f}",
+            #         "rms_dbfs": f"{seg.rms_dbfs:.3f}",
+            #     })
+            #     continue
 
             chunk = data[seg.start_frame:seg.end_frame].copy()
-            chunk = peak_normalize(chunk, sampwidth, args.peak_normalize_dbfs)
-            for cand in targets:
-                out_path = format_output_path(args.output_template, args.out_root, inp.word, cand, args.suffix)
-                out_index = 0 if cand.output_index is None else cand.output_index
-                level = cand.level
-                candidate_text = cand.candidate
-                distance = "" if cand.distance is None else f"{cand.distance:.9f}"
-                written_candidates[inp.word].add(candidate_key(cand))
+            chunk = peak_normalize(chunk, sampwidth, signal_cfg.peak_normalize_dbfs)
 
-                print(f"  {local_i:02d} -> {out_path}  [{seg.start_s:.3f}, {seg.end_s:.3f}] {seg.end_s-seg.start_s:.3f}s")
+            # This chunk is for this word and this augmentation, set to all
+            # augmentation vocab and save to all new filenames
+            aug_word = transcript_dict[inp.word]['aug_word'].loc[aug_idx]
+
+            new_fnames = all_aug_df[
+                (all_aug_df['aug_word']==aug_word) & \
+                (all_aug_df['word']==inp.word)
+            ]['new_fname']
+
+            # for all of these words: save
+            for new_fname in new_fnames:
+                print(f"  {aug_idx:02d} -> {new_fname}  [{seg.start_s:.3f}, {seg.end_s:.3f}] {seg.end_s-seg.start_s:.3f}s")
                 if not args.dry_run:
-                    write_wav_pcm(out_path, sr, channels, sampwidth, chunk)
+                    write_wav_pcm(new_fname, sr, channels, sampwidth, chunk)
 
-                rows.append({
-                    "input": str(inp.path),
-                    "source_word": inp.word,
-                    "batch": str(inp.batch),
-                    "local_chunk_index": str(local_i),
-                    "candidate_sequence_index": str(next_candidate[inp.word] - 1),
-                    "output_index": f"{out_index:04d}",
-                    "level": level,
-                    "candidate": candidate_text,
-                    "distance": distance,
-                    "output": str(out_path),
-                    "start_s": f"{seg.start_s:.6f}",
-                    "end_s": f"{seg.end_s:.6f}",
-                    "duration_s": f"{seg.end_s-seg.start_s:.6f}",
-                    "threshold_dbfs": f"{threshold:.3f}",
-                    "noise_floor_dbfs": f"{noise_floor:.3f}",
-                    "peak_dbfs": f"{seg.peak_dbfs:.3f}",
-                    "rms_dbfs": f"{seg.rms_dbfs:.3f}",
-                })
 
-    for word, cands in candidates_by_word.items():
-        if cands and args.candidate_match_mode == "text":
-            missing = [
-                cand for cand in cands
-                if candidate_key(cand) not in written_candidates[word]
-            ]
-            if missing:
-                missing_texts = sorted({cand.candidate for cand in missing})
-                print(
-                    f"Warning: wrote {len(cands) - len(missing)} candidates for '{word}', but scored.json has {len(cands)} candidates. "
-                    f"Missing candidate texts: {', '.join(missing_texts[:20])}"
-                    f"{' ...' if len(missing_texts) > 20 else ''}",
-                    file=sys.stderr,
-                )
-        elif cands and next_candidate[word] != len(cands):
-            print(
-                f"Warning: consumed {next_candidate[word]} chunks for '{word}', but scored.json has {len(cands)} candidates. "
-                f"Remaining candidates were not written.",
-                file=sys.stderr,
-            )
+            # for cand in targets:
+            #     out_path = format_output_path(args.output_template, args.out_root, inp.word, cand, args.suffix)
+            #     out_index = 0 if cand.output_index is None else cand.output_index
+            #     level = cand.output_level or cand.level
+            #     candidate_text = cand.candidate
+            #     distance = "" if cand.distance is None else f"{cand.distance:.9f}"
+            #     written_candidates[inp.word].add(candidate_key(cand))
 
-    if rows and not args.dry_run:
-        metadata_path.parent.mkdir(parents=True, exist_ok=True)
-        with metadata_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-            writer.writeheader()
-            writer.writerows(rows)
-        print(f"Wrote metadata: {metadata_path}")
+            #     print(f"  {local_i:02d} -> {out_path}  [{seg.start_s:.3f}, {seg.end_s:.3f}] {seg.end_s-seg.start_s:.3f}s")
+            #     if not args.dry_run:
+            #         write_wav_pcm(out_path, sr, channels, sampwidth, chunk)
+
+            #     rows.append({
+            #         "input": str(inp.path),
+            #         "source_word": inp.word,
+            #         "batch": str(inp.batch),
+            #         "local_chunk_index": str(local_i),
+            #         "candidate_sequence_index": str(next_candidate[inp.word] - 1),
+            #         "output_index": f"{out_index:04d}",
+            #         "level": level,
+            #         "candidate": candidate_text,
+            #         "distance": distance,
+            #         "output": str(out_path),
+            #         "start_s": f"{seg.start_s:.6f}",
+            #         "end_s": f"{seg.end_s:.6f}",
+            #         "duration_s": f"{seg.end_s-seg.start_s:.6f}",
+            #         "threshold_dbfs": f"{threshold:.3f}",
+            #         "noise_floor_dbfs": f"{noise_floor:.3f}",
+            #         "peak_dbfs": f"{seg.peak_dbfs:.3f}",
+            #         "rms_dbfs": f"{seg.rms_dbfs:.3f}",
+            #     })
+
+    # for word, cands in candidates_by_word.items():
+    #     if cands and args.candidate_match_mode == "text":
+    #         missing = [
+    #             cand for cand in cands
+    #             if candidate_key(cand) not in written_candidates[word]
+    #         ]
+    #         if missing:
+    #             missing_texts = sorted({cand.candidate for cand in missing})
+    #             print(
+    #                 f"Warning: wrote {len(cands) - len(missing)} candidates for '{word}', but scored.json has {len(cands)} candidates. "
+    #                 f"Missing candidate texts: {', '.join(missing_texts[:20])}"
+    #                 f"{' ...' if len(missing_texts) > 20 else ''}",
+    #                 file=sys.stderr,
+    #             )
+    #     elif cands and next_candidate[word] != len(cands):
+    #         print(
+    #             f"Warning: consumed {next_candidate[word]} chunks for '{word}', but scored.json has {len(cands)} candidates. "
+    #             f"Remaining candidates were not written.",
+    #             file=sys.stderr,
+    #         )
+
+#     if rows and not args.dry_run:
+#         metadata_path.parent.mkdir(parents=True, exist_ok=True)
+#         with metadata_path.open("w", newline="", encoding="utf-8") as f:
+#             writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+#             writer.writeheader()
+#             writer.writerows(rows)
+#         print(f"Wrote metadata: {metadata_path}")
 
     return 0
 
