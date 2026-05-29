@@ -1410,14 +1410,19 @@ def main() -> None:
     elif not word:
         parser.error("--word is required unless --eeg is used.")
 
+    # optional: only if not man or woman
     voice_mode = normalize_voice_mode(args.requested_voice)
 
+    # generate the assets if it doesn't exist
     ensure_word_library(
         word=word,
         voice_mode=voice_mode,
         args=args,
     )
 
+    # key part: takes the word, voice, where to search the assets and the
+    # distance signal for binning before returning the result dict. The key you
+    # want is 'audio_path'. The rest are for diagnostics
     result = select_per_phoneme_asset_from_library(
         word=word,
         requested_voice=voice_mode,
