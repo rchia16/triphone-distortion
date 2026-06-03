@@ -4,6 +4,10 @@ deep_phone_candidate_stack_blabber_triphone.py
 
 Phone-level pseudoword candidate generator for blabber-library assets.
 
+Level discrimination decides which transformations are eligible; min/max 
+distortion decides whether the resulting candidate lands in the desired 
+acoustic/phonological distance range.
+
 Current defaults:
   TTS backend:
     piper

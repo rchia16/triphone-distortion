@@ -2,6 +2,7 @@ import os
 import pickle
 import numpy as np
 from scipy.signal import stft
+from eeg_datasets import EEGRealtimeDataset
 
 # BASE_ROOT = r"C:/Users/IDBA/Downloads/UTS_EEG/Dataloader/dataset_cache/Daniel"
 BASE_ROOT = r"/data/raqchia/datasets/raw/imagined-speech/Daniel"
@@ -14,7 +15,6 @@ def path_builder(day: int, sess: int) -> str:
 def patch_pickle_classes():
     try:
         import __main__
-        from eeg_datasets import EEGRealtimeDataset
         __main__.EEGRealtimeDataset = EEGRealtimeDataset
         print("[Info] Patched __main__.EEGRealtimeDataset")
     except Exception as e:
