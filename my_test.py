@@ -42,6 +42,10 @@ import argparse
 import json
 import pprint
 import sys
+import itertools
+import zimtohrli
+
+from glob import glob
 
 import numpy as np
 from scipy.fftpack import dct
@@ -62,14 +66,9 @@ from select_blabber_asset import (
 from select_blabber_asset_triphone import load_assets, select_assets, asset_level
 
 
-REQUESTED_VOICE = "female"
-TRIPHONE_ASSET_ROOT = Path(
-    os.environ.get(
-        "TRIPHONE_ASSET_ROOT",
-        r"/data/raqchia/audio-assets/speech-assets-triphone",
-    )
-)
-GENERATION_MODE = "triphone"
+REQUESTED_VOICE = "man"
+TRIPHONE_ASSET_ROOT = "/Users/160843/Downloads/tmp/speech-assets-triphone/"
+GENERATION_MODE = "triphone-slowed"
 
 # Selection-time level influence in `select_assets`:
 #   level_score = max(0, 1 - abs(asset_level - target_level))
@@ -626,6 +625,51 @@ def select_triphone_global_asset(comparison: dict, requested_voice: str) -> dict
         "per_time_l2": list(comparison["per_time_l2"]),
     }
 
+def load_zimtohrli_audio(path, sr_required=48000):
+    sr, audio = wavfile.read(path)
+    if sr != sr_required:
+        raise ValueError(f"{path} is {sr} Hz, expected {sr_required} Hz")
+
+    # Convert PCM int to float [-1, 1]
+    if audio.dtype == np.int16:
+        audio = audio.astype(np.float32) / 32768.0
+    elif audio.dtype == np.int32:
+        audio = audio.astype(np.float32) / 2147483648.0
+    elif audio.dtype == np.float32 or audio.dtype == np.float64:
+        audio = audio.astype(np.float32)
+    else:
+        raise ValueError(f"Unsupported dtype {audio.dtype} for {path}")
+
+    # Zimtohrli examples expect a 1-D float sample array.
+    # For stereo, average to mono unless you intentionally want channel-specific scoring.
+    if audio.ndim == 2:
+        audio = audio.mean(axis=1)
+
+    return np.ascontiguousarray(audio, dtype=np.float32)
+
+def perceptual_distance_calculation(audio_files: list, print_log=False) -> dict:
+    metric = zimtohrli.Pyohrli()
+    audio_files = [str(Path(p)) for p in audio_files]
+
+    # Load once, compare many times
+    audio_cache = {path: load_zimtohrli_audio(path) for path in audio_files}
+
+    distances = {path: {} for path in audio_files}
+
+    generator = enumerate(itertools.combinations(audio_files, 2))
+    for idx, (audio_i, audio_j) in generator:
+        ref_spec = metric.analyze(audio_cache[audio_i])
+        dis_spec = metric.analyze(audio_cache[audio_j])
+        distance = metric.distance(ref_spec, dis_spec)
+
+        distances[audio_i][audio_j] = distance
+        distances[audio_j][audio_i] = distance
+
+        if print_log:
+            print(f"[{idx}] {Path(audio_i).name} <-> {Path(audio_j).name}: {distance:.6f}")
+
+    return distances
+
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -637,6 +681,25 @@ if __name__ == "__main__":
 
     RANKING_MODE = str(args.ranking_mode).strip().lower()
     REQUESTED_VOICE = str(args.requested_voice).strip().lower()
+
+    # -----------------------------------------------------------------
+    # 5) Compare by perceptual distance
+    # -----------------------------------------------------------------
+    words = list(LEXICON.keys())
+    root_dir = os.path.join(TRIPHONE_ASSET_ROOT, REQUESTED_VOICE,
+                            GENERATION_MODE)
+    for word in words:
+        word_dir = os.path.join(root_dir, word)
+        level_dir = os.path.join(word_dir, 'level_1.00')
+        audio_list = glob(os.path.join(level_dir, "*.wav"))
+        perceptual_distances = perceptual_distance_calculation(audio_list)
+        existing_score_fname = os.path.join(word_dir, f'{word}_blabber_scored.json')
+        with open(existing_score_fname, 'r') as f:
+            existing_scores = json.load(f)
+        candidates = existing_scores['candidates']
+        # TODO simplify this for a single level search with nsteps, min and max
+        # and a reject word criteria
+        import pdb; pdb.set_trace()
 
     """
     Take from `Function call copy_v2.ipynb`
