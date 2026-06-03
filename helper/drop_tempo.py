@@ -1,6 +1,8 @@
 from pathlib import Path
 import subprocess
 
+FFMPEG = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"
+
 root_folder = Path("/Users/160843/Downloads/tmp")
 input_folder = root_folder / "speech-assets-triphone" / "man" / "triphone"
 output_folder = root_folder / "speech-assets-triphone" / "man" / "triphone-slowed"
@@ -13,9 +15,11 @@ for input_path in sorted(input_folder.rglob("*.wav")):
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        "ffmpeg", "-y",
+        FFMPEG,
+        "-y",
         "-i", str(input_path),
-        "-filter:a", f"atempo={tempo}",
+        "-ar", str(48000),
+        "-af", f"rubberband=tempo={tempo}",
         str(output_path),
     ]
 
