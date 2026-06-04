@@ -67,7 +67,7 @@ ORIGINAL_ASSETS = f"{PARENT_DIR}/speech-assets-triphone/man/triphone/"
 # RAY_ASSET_DIR = Path(f"{PARENT_DIR}/RayAssets/")
 RAY_ASSET_DIR = Path(f"{PARENT_DIR}/RayAssets/")
 ORIGINAL_VOICE = "piper"
-TRANSCRIPT_DIR = "/projects/SSNFB/Ray/audio-assets/text-only/text/triphone/"
+TRANSCRIPT_DIR = str(RAY_ASSET_DIR) + "/text-only/text/triphone/" 
 
 @dataclass
 class Segment:

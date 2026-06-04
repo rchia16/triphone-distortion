@@ -46,8 +46,10 @@ import itertools
 import zimtohrli
 
 from glob import glob
+import ipdb
 
 import numpy as np
+import pandas as pd
 from scipy.fftpack import dct
 from scipy.io import wavfile
 from scipy.signal import stft, resample
@@ -67,8 +69,11 @@ from select_blabber_asset_triphone import load_assets, select_assets, asset_leve
 
 
 REQUESTED_VOICE = "man"
-TRIPHONE_ASSET_ROOT = "/Users/160843/Downloads/tmp/speech-assets-triphone/"
+# TRIPHONE_ASSET_ROOT = "/Users/160843/Downloads/tmp/speech-assets-triphone/"
+ROOT_DIR = "/data/raqchia/audio-assets/"
+TRIPHONE_ASSET_ROOT = ROOT_DIR + "speech-assets-triphone/"
 GENERATION_MODE = "triphone-slowed"
+VOICE = 'en-AU-Ray'
 
 # Selection-time level influence in `select_assets`:
 #   level_score = max(0, 1 - abs(asset_level - target_level))
@@ -647,23 +652,31 @@ def load_zimtohrli_audio(path, sr_required=48000):
 
     return np.ascontiguousarray(audio, dtype=np.float32)
 
-def perceptual_distance_calculation(audio_files: list, print_log=False) -> dict:
+def perceptual_distance_calculation(
+    audio_files:list, original_audio:str, original_word:str,
+    print_log=False
+) -> dict:
     metric = zimtohrli.Pyohrli()
     audio_files = [str(Path(p)) for p in audio_files]
 
     # Load once, compare many times
     audio_cache = {path: load_zimtohrli_audio(path) for path in audio_files}
 
-    distances = {path: {} for path in audio_files}
+    audio_i = load_zimtohrli_audio(original_audio)
+    ref_spec = metric.analyze(audio_i)
 
-    generator = enumerate(itertools.combinations(audio_files, 2))
-    for idx, (audio_i, audio_j) in generator:
-        ref_spec = metric.analyze(audio_cache[audio_i])
+    distances = {}
+
+    distances[original_word] = 0.0
+
+    # generator = enumerate(itertools.combinations(audio_files, 2))
+
+    for idx, audio_j in enumerate(audio_files):
+        grapheme = separate_grapheme_from_path(audio_j)
         dis_spec = metric.analyze(audio_cache[audio_j])
         distance = metric.distance(ref_spec, dis_spec)
 
-        distances[audio_i][audio_j] = distance
-        distances[audio_j][audio_i] = distance
+        distances[grapheme] = distance
 
         if print_log:
             print(f"[{idx}] {Path(audio_i).name} <-> {Path(audio_j).name}: {distance:.6f}")
@@ -701,35 +714,89 @@ def select_triphone_asset_simplified(
 
     # return the asset path to play
 
+def separate_grapheme_from_path(audio_file:str):
+    fname = audio_file.split(os.path.sep)[-1]
+    return fname.split("_")[2]
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--json-out", default=None, help="Write the selection result to this JSON file.")
-    p.add_argument("--overwrite", action="store_true", help="Overwrite --json-out if it already exists.")
-    p.add_argument("--ranking-mode", default=RANKING_MODE, choices=["temporal", "cmvn", "audio_cmvn"], help="Ranking mode to use for final candidate selection.")
-    p.add_argument("--requested-voice", default=REQUESTED_VOICE, choices=["female", "male", "woman", "man"], help="Requested voice bank.")
+    p.add_argument("--json-out", default=None,
+                   help="Write the selection result to this JSON file.")
+    p.add_argument("--overwrite", action="store_true",
+                   help="Overwrite --json-out if it already exists.")
+    p.add_argument("--ranking-mode", default=RANKING_MODE, 
+                   choices=["temporal", "cmvn", "audio_cmvn"],
+                   help="Ranking mode to use for final candidate selection.")
+    p.add_argument("--requested-voice",
+                   default=REQUESTED_VOICE,
+                   choices=["female", "male", "woman", "man"],
+                   help="Requested voice bank.")
     args = p.parse_args()
 
     RANKING_MODE = str(args.ranking_mode).strip().lower()
     REQUESTED_VOICE = str(args.requested_voice).strip().lower()
 
     # -----------------------------------------------------------------
-    # 5) Compare by perceptual distance
+    # Create ranking matrix if it does not exist
     # -----------------------------------------------------------------
     words = list(LEXICON.keys())
     root_dir = os.path.join(TRIPHONE_ASSET_ROOT, REQUESTED_VOICE,
                             GENERATION_MODE)
+
+    wav_suffix = f"*{VOICE}.wav"
+
+    rankings = {}
     for word in words:
         word_dir = os.path.join(root_dir, word)
-        level_dir = os.path.join(word_dir, 'level_1.00')
-        audio_list = glob(os.path.join(level_dir, "*.wav"))
-        perceptual_distances = perceptual_distance_calculation(audio_list)
-        existing_score_fname = os.path.join(word_dir, f'{word}_blabber_scored.json')
+        level_glob = glob(os.path.join(word_dir, 'level*'))
+
+        original_audio = glob(os.path.join(word_dir, 'level_0.00', wav_suffix))[0]
+
+        existing_score_fname = os.path.join(
+            word_dir, f'{word}_blabber_scored.json')
+
         with open(existing_score_fname, 'r') as f:
             existing_scores = json.load(f)
+
         candidates = existing_scores['candidates']
-        # TODO simplify this for a single level search with nsteps, min and max
-        # and a reject word criteria
-        import pdb; pdb.set_trace()
+        df = pd.DataFrame(candidates)
+
+        graphemes = df['grapheme'].unique()
+
+        audio_files_dict = {}
+
+        audio_files = glob(os.path.join(word_dir, 'level*', wav_suffix))
+        graphemes = {
+            separate_grapheme_from_path(fname): fname for fname in \
+            audio_files
+        }
+        for grapheme, fname in graphemes.items():
+            if grapheme not in audio_files_dict.keys():
+                audio_files_dict[grapheme] = fname
+
+        perceptual_distances = perceptual_distance_calculation(
+            list(audio_files_dict.values()), original_audio, word)
+
+        tmp = [
+            df[df['grapheme'] == grapheme] for grapheme in \
+            df['grapheme'].unique()
+        ]
+        rankings[word] = {
+            x['grapheme'].iloc[0]: {
+                'phone_distance': x['phone_distance'].iloc[0],
+                'phone_similarity': x['phone_similarity'].iloc[0],
+                'perceptual_distance': perceptual_distances[
+                    x['grapheme'].iloc[0]
+                ]
+            } for x in tmp if x['grapheme'].iloc[0] in
+            perceptual_distances.keys()
+        }
+
+        df_out = pd.DataFrame(rankings[word]).T
+        df_out.to_json(os.path.join(word_dir, f"{word}_rankings.json"))
+
+    # TODO simplify this for a single level search with nsteps, min and max
+    # and a reject word criteria
 
     """
     Take from `Function call copy_v2.ipynb`
