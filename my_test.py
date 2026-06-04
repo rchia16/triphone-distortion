@@ -627,6 +627,36 @@ def select_triphone_global_asset(comparison: dict, requested_voice: str) -> dict
     }
 
 
+def select_triphone_asset_simplified(
+    comparison:dict, requested_voice:str, level_directory:str,
+    min_rank:float=0.0, max_rank:float=1.0, steps:int=4,
+) -> dict:
+
+    """Select one triphone asset using global + temporal feedback criteria."""
+    word = str(comparison.get("label_name") or "").strip().lower()
+    if word not in LEXICON:
+        raise ValueError(f"No canonical phone sequence configured for word '{word}'.")
+
+    voice_mode = normalize_voice_mode(requested_voice)
+    library_path = library_json_path(word, voice_mode)
+    if not library_path.is_file():
+        raise FileNotFoundError(f"Missing triphone library JSON: {library_path}")
+
+    # get the min acceptable rank id
+
+    # get the max acceptable rank id
+
+    # get the number of steps between the ranks
+
+    # raise warning if the number of steps is larger than the actual number of
+    # words
+
+    # for the comparison signal coming in, average across the entire signal and
+    # get the closest asset according to the rank. 0 distance means closest
+    # to min and 1 distance means closest to max rank
+
+    # return the asset path to play
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--json-out", default=None, help="Write the selection result to this JSON file.")

@@ -67,6 +67,7 @@ ORIGINAL_ASSETS = f"{PARENT_DIR}/speech-assets-triphone/man/triphone/"
 # RAY_ASSET_DIR = Path(f"{PARENT_DIR}/RayAssets/")
 RAY_ASSET_DIR = Path(f"{PARENT_DIR}/RayAssets/")
 ORIGINAL_VOICE = "piper"
+TRANSCRIPT_DIR = "/projects/SSNFB/Ray/audio-assets/text-only/text/triphone/"
 
 @dataclass
 class Segment:
@@ -737,6 +738,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     word_cfg_dicts = []
     for word in words:
         word_glob = glob(ORIGINAL_ASSETS + f"/{word}/**/*{ORIGINAL_VOICE}.wav")
+
         for wav_fname in word_glob:
             # split by level, index, and word
             fname_path = Path(wav_fname)
@@ -759,11 +761,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     all_aug_df = pd.DataFrame(word_cfg_dicts)
     lvl_standard = 'L1.00'
-    # FIXME this needs to be patched to read the string and the line is the
-    # index, search by string rather than by index
-    # with open("my_transcript.txt", 'r') as f:
-    #     my_transcript = f.read()
-    # TODO map new line as index to string
 
     transcript_dict = {}
     for word in words:
@@ -783,7 +780,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             ['aug_word', 'index', 'new_audio', 'new_fname']
         ].reset_index(drop=True)
         print(df)
-        import pdb; pdb.set_trace()
 
     metadata_path = args.metadata or (args.out_root / "chunk_metadata.csv")
     # rows: List[Dict[str, str]] = []
@@ -824,7 +820,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         file_idx = int(str(inp.path).split("_")[-1][:2])-1
 
         print(f"{inp.path.name}: {len(segments)} chunks,"\
-              f"threshold={threshold:.1f} dBFS, noise_p{signal_cfg.noise_percentile:g}={noise_floor:.1f} dBFS")
+              f"threshold={threshold:.1f} dBFS, "\
+              "noise_p{signal_cfg.noise_percentile:g}={noise_floor:.1f} dBFS")
+
+        # Patched to read the string and the line is the
+        # index, search by string rather than by index
+        with open(f"{TRANSCRIPT_DIR}/{inp.word}/{inp.word}_combinations.txt", 'r') as f:
+            transcript = f.read()
+        transcript = [text for text in transcript.split("\n") if text!=""]
+
         for local_i, seg in enumerate(segments, start=1):
             local_idx = local_i - 1
             aug_idx = file_idx*10 + local_idx
@@ -908,8 +912,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
             # This chunk is for this word and this augmentation, set to all
             # augmentation vocab and save to all new filenames
-            aug_word = transcript_dict[inp.word]['aug_word'].loc[aug_idx]
+            aug_word = transcript[aug_idx]
+            # aug_word = transcript_dict[inp.word]['aug_word'].loc[aug_idx]
 
+            # paired by string, the rest follows
             new_fnames = all_aug_df[
                 (all_aug_df['aug_word']==aug_word) & \
                 (all_aug_df['word']==inp.word)
@@ -917,6 +923,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
             # for all of these words: save
             for new_fname in new_fnames:
+                print(f"{inp.word} \t {inp.path} \t {aug_word}")
                 print(f"  {aug_idx:02d} -> {new_fname}  [{seg.start_s:.3f}, {seg.end_s:.3f}] {seg.end_s-seg.start_s:.3f}s")
                 if not args.dry_run:
                     write_wav_pcm(new_fname, sr, channels, sampwidth, chunk)
