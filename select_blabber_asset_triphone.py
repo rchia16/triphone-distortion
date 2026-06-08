@@ -60,11 +60,18 @@ Examples:
 
 from __future__ import annotations
 
+import os
+from glob import glob
 import argparse
 import json
 import math
 from pathlib import Path
 from typing import Any
+
+import zimtohrli
+import numpy as np
+import pandas as pd
+from scipy.io import wavfile
 
 # Treat level 1.0 as about 0.55 phone-distance away from ground truth.
 PHONE_DISTANCE_MAX_TARGET = 0.55
@@ -658,6 +665,122 @@ def select_assets(
         ground_truth_level_tolerance=ground_truth_level_tolerance,
     )
 
+def separate_grapheme_from_path(audio_file:str):
+    fname = audio_file.split(os.path.sep)[-1]
+    return fname.split("_")[0]
+
+def load_zimtohrli_audio(path, sr_required=48000):
+    sr, audio = wavfile.read(path)
+    if sr != sr_required:
+        raise ValueError(f"{path} is {sr} Hz, expected {sr_required} Hz")
+
+    # Convert PCM int to float [-1, 1]
+    if audio.dtype == np.int16:
+        audio = audio.astype(np.float32) / 32768.0
+    elif audio.dtype == np.int32:
+        audio = audio.astype(np.float32) / 2147483648.0
+    elif audio.dtype == np.float32 or audio.dtype == np.float64:
+        audio = audio.astype(np.float32)
+    else:
+        raise ValueError(f"Unsupported dtype {audio.dtype} for {path}")
+
+    # Zimtohrli examples expect a 1-D float sample array.
+    # For stereo, average to mono unless you intentionally want channel-specific scoring.
+    if audio.ndim == 2:
+        audio = audio.mean(axis=1)
+
+    return np.ascontiguousarray(audio, dtype=np.float32)
+
+def perceptual_distance_calculation(
+    audio_files:list, original_audio:str, original_word:str,
+    print_log=False
+) -> dict:
+    metric = zimtohrli.Pyohrli()
+    audio_files = [str(Path(p)) for p in audio_files]
+
+    # Load once, compare many times
+    audio_cache = {path: load_zimtohrli_audio(path) for path in audio_files}
+
+    audio_i = load_zimtohrli_audio(original_audio)
+    ref_spec = metric.analyze(audio_i)
+
+    distances = {}
+
+    distances[original_word] = 0.0
+
+    # generator = enumerate(itertools.combinations(audio_files, 2))
+
+    for idx, audio_j in enumerate(audio_files):
+        grapheme = separate_grapheme_from_path(audio_j)
+        dis_spec = metric.analyze(audio_cache[audio_j])
+        distance = metric.distance(ref_spec, dis_spec)
+
+        distances[grapheme] = distance
+
+        if print_log:
+            print(f"[{idx}] {Path(audio_i).name} <-> {Path(audio_j).name}: {distance:.6f}")
+
+    return distances
+
+def create_ranking_matrix(root_dir, lexicon, voice='en-AU-Ray'):
+    words = list(lexicon.keys())
+
+    wav_suffix = f"{voice}.wav"
+
+    rankings = {}
+    for word in words:
+        word_dir = os.path.join(root_dir, word)
+
+        original_audio = glob(os.path.join(word_dir, f"{word}_{wav_suffix}"))[0]
+
+        existing_score_fname = os.path.join(
+            word_dir, f'{word}_blabber_scored.json')
+
+        with open(existing_score_fname, 'r') as f:
+            existing_scores = json.load(f)
+
+        candidates = existing_scores['candidates']
+        df = pd.DataFrame(candidates)
+
+        graphemes = df['grapheme'].unique()
+
+        audio_files_dict = {}
+
+        audio_files = glob(os.path.join(word_dir, "*" + wav_suffix))
+        graphemes = {
+            separate_grapheme_from_path(fname): fname for fname in \
+            audio_files
+        }
+        for grapheme, fname in graphemes.items():
+            if grapheme not in audio_files_dict.keys():
+                audio_files_dict[grapheme] = fname
+
+        perceptual_distances = perceptual_distance_calculation(
+            list(audio_files_dict.values()), original_audio, word)
+
+        tmp = [
+            df[df['grapheme'] == grapheme] for grapheme in \
+            df['grapheme'].unique()
+        ]
+        rankings[word] = {
+            x['grapheme'].iloc[0]: {
+                'phone_distance': x['phone_distance'].iloc[0],
+                'phone_similarity': x['phone_similarity'].iloc[0],
+                'perceptual_distance': perceptual_distances[
+                    x['grapheme'].iloc[0]
+                ]
+            } for x in tmp if x['grapheme'].iloc[0] in
+            perceptual_distances.keys()
+        }
+
+        df_out = pd.DataFrame(rankings[word]).T
+        df_out.to_json(os.path.join(word_dir, f"{word}_rankings.json"))
+
+def load_ranking_json(word, root_dir, voice='en-AU-Ray'):
+    wav_suffix = f"*{voice}.wav"
+    word_dir = os.path.join(root_dir, word)
+    json_file = os.path.join(word_dir, f"{word}_rankings.json")
+    return json.loads(Path(json_file).read_text())
 
 def main() -> None:
     p = argparse.ArgumentParser()

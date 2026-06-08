@@ -43,7 +43,8 @@ import json
 import pprint
 import sys
 import itertools
-import zimtohrli
+import pickle
+import warnings
 
 from glob import glob
 import ipdb
@@ -53,6 +54,7 @@ import pandas as pd
 from scipy.fftpack import dct
 from scipy.io import wavfile
 from scipy.signal import stft, resample
+import zimtohrli
 
 from Template_l2_compare_v2 import (
     compare_signal_to_prebuilt_template,
@@ -65,13 +67,20 @@ from select_blabber_asset import (
     normalize_voice_mode,
 )
 
-from select_blabber_asset_triphone import load_assets, select_assets, asset_level
+from select_blabber_asset_triphone import (
+    load_assets, select_assets, asset_level,
+    load_zimtohrli_audio, perceptual_distance_calculation,
+    create_ranking_matrix, load_ranking_json
+)
 
+# TRIPHONE_ASSET_ROOT = ROOT_DIR + "speech-assets-triphone/"
 
 REQUESTED_VOICE = "man"
-# TRIPHONE_ASSET_ROOT = "/Users/160843/Downloads/tmp/speech-assets-triphone/"
-ROOT_DIR = "/data/raqchia/audio-assets/"
-TRIPHONE_ASSET_ROOT = ROOT_DIR + "speech-assets-triphone/"
+# ROOT_DIR = "/data/raqchia/audio-assets/"
+# TRIPHONE_ASSET_ROOT = ROOT_DIR + "RayAssets"
+
+ROOT_DIR = "/projects/SSNFB/Ray/audio-assets/"
+TRIPHONE_ASSET_ROOT = ROOT_DIR + "ray-assets"
 GENERATION_MODE = "triphone-slowed"
 VOICE = 'en-AU-Ray'
 
@@ -630,93 +639,95 @@ def select_triphone_global_asset(comparison: dict, requested_voice: str) -> dict
         "per_time_l2": list(comparison["per_time_l2"]),
     }
 
-def load_zimtohrli_audio(path, sr_required=48000):
-    sr, audio = wavfile.read(path)
-    if sr != sr_required:
-        raise ValueError(f"{path} is {sr} Hz, expected {sr_required} Hz")
+def get_root_dir():
+    root_dir = os.path.join(TRIPHONE_ASSET_ROOT, REQUESTED_VOICE,
+                            GENERATION_MODE)
+    return root_dir
 
-    # Convert PCM int to float [-1, 1]
-    if audio.dtype == np.int16:
-        audio = audio.astype(np.float32) / 32768.0
-    elif audio.dtype == np.int32:
-        audio = audio.astype(np.float32) / 2147483648.0
-    elif audio.dtype == np.float32 or audio.dtype == np.float64:
-        audio = audio.astype(np.float32)
-    else:
-        raise ValueError(f"Unsupported dtype {audio.dtype} for {path}")
+def get_word_dir(root_dir, word, voice=VOICE):
+    wav_suffix = f"*{voice}.wav"
+    word_dir = os.path.join(root_dir, word)
+    return word_dir
 
-    # Zimtohrli examples expect a 1-D float sample array.
-    # For stereo, average to mono unless you intentionally want channel-specific scoring.
-    if audio.ndim == 2:
-        audio = audio.mean(axis=1)
+def get_word_rankings(root_dir, voice=VOICE) -> dict:
+    word_rankings = {}
+    for word in LEXICON.keys():
+        word_dir = get_word_dir(root_dir, word, voice=voice)
+        try:
+            ranking = load_ranking_json(word, root_dir, voice=voice)
+            print(f"loaded rankings from {word} directory")
+        except:
+            create_ranking_matrix(root_dir, LEXICON, voice=VOICE)
+            ranking = load_ranking_json(word, root_dir, voice=voice)
+            print(f"created and loaded rankings from {word} directory")
+        ranking = pd.DataFrame(ranking)
+        word_rankings[word] = {
+            'directory': word_dir, 
+            'ranking': ranking
+        }
 
-    return np.ascontiguousarray(audio, dtype=np.float32)
-
-def perceptual_distance_calculation(
-    audio_files:list, original_audio:str, original_word:str,
-    print_log=False
-) -> dict:
-    metric = zimtohrli.Pyohrli()
-    audio_files = [str(Path(p)) for p in audio_files]
-
-    # Load once, compare many times
-    audio_cache = {path: load_zimtohrli_audio(path) for path in audio_files}
-
-    audio_i = load_zimtohrli_audio(original_audio)
-    ref_spec = metric.analyze(audio_i)
-
-    distances = {}
-
-    distances[original_word] = 0.0
-
-    # generator = enumerate(itertools.combinations(audio_files, 2))
-
-    for idx, audio_j in enumerate(audio_files):
-        grapheme = separate_grapheme_from_path(audio_j)
-        dis_spec = metric.analyze(audio_cache[audio_j])
-        distance = metric.distance(ref_spec, dis_spec)
-
-        distances[grapheme] = distance
-
-        if print_log:
-            print(f"[{idx}] {Path(audio_i).name} <-> {Path(audio_j).name}: {distance:.6f}")
-
-    return distances
-
+    return word_rankings
 
 def select_triphone_asset_simplified(
-    comparison:dict, requested_voice:str, level_directory:str,
-    min_rank:float=0.0, max_rank:float=1.0, steps:int=4,
+    word, result, word_rankings,
+    min_rank=0.0, max_rank=1.0, n_steps=10, voice='en-AU-Ray',
+    rank_by:str='perceptual_distance', ascending:bool=True,
+    test_distance=None, filetype='wav', print_debug:bool=False
 ) -> dict:
 
-    """Select one triphone asset using global + temporal feedback criteria."""
-    word = str(comparison.get("label_name") or "").strip().lower()
-    if word not in LEXICON:
-        raise ValueError(f"No canonical phone sequence configured for word '{word}'.")
+    word = word.lower()
 
-    voice_mode = normalize_voice_mode(requested_voice)
-    library_path = library_json_path(word, voice_mode)
-    if not library_path.is_file():
-        raise FileNotFoundError(f"Missing triphone library JSON: {library_path}")
+    directory = word_rankings[word]['directory']
+    ranking = word_rankings[word]['ranking']
 
-    # get the min acceptable rank id
+    ranking_sorted = ranking.sort_values(by=rank_by, ascending=ascending)
+    n_assets = len(ranking_sorted.index.to_list())
 
-    # get the max acceptable rank id
+    # from min and max acceptable rank id and the number of steps between the
+    # ranks: create lookup list
+    min_idx = int(n_assets*min_rank)
+    max_idx = int(np.ceil(n_assets*max_rank))
+    scaled_idx_list = np.arange(min_idx, max_idx)
 
-    # get the number of steps between the ranks
+    n_scaled_assets = len(scaled_idx_list)
 
     # raise warning if the number of steps is larger than the actual number of
     # words
+    if n_steps > n_scaled_assets:
+        n_steps = n_scaled_assets
+        warnings.warn("Asset step count greater than number of assets. "\
+                      "Step count reset to max number of assets")
+
+    # construct the rankings to n_steps scaled from min and max ranks
+    min_max_idxs = np.linspace(min_idx, max_idx-1, n_steps).astype(int)
+    new_ranking = ranking_sorted.iloc[min_max_idxs]
 
     # for the comparison signal coming in, average across the entire signal and
     # get the closest asset according to the rank. 0 distance means closest
     # to min and 1 distance means closest to max rank
+    if test_distance is None:
+        mean_distance = result['mean_l2']
+    else:
+        mean_distance = test_distance
+
+    asset_step = np.round(mean_distance * n_steps).astype(int)
+
+    distorted_word = new_ranking.iloc[asset_step].name
+    asset_path = os.path.join(
+        directory, f"{distorted_word}_{voice}.{filetype}"
+    )
+    assert os.path.exists(asset_path), f"Error: {asset_path} asset path "\
+            "does not exist"
+
+    if print_debug:
+        print("mean distance: ", np.round(mean_distance, 3))
+        print("n steps: ", n_steps)
+        print(new_ranking)
+        print("asset step: ", asset_step)
+
 
     # return the asset path to play
-
-def separate_grapheme_from_path(audio_file:str):
-    fname = audio_file.split(os.path.sep)[-1]
-    return fname.split("_")[2]
+    return asset_path
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -736,68 +747,19 @@ if __name__ == "__main__":
     RANKING_MODE = str(args.ranking_mode).strip().lower()
     REQUESTED_VOICE = str(args.requested_voice).strip().lower()
 
+    # =================================================================
+    # PREPARATION WORK
+    # =================================================================
+    root_dir = get_root_dir()
+
     # -----------------------------------------------------------------
     # Create ranking matrix if it does not exist
     # -----------------------------------------------------------------
-    words = list(LEXICON.keys())
-    root_dir = os.path.join(TRIPHONE_ASSET_ROOT, REQUESTED_VOICE,
-                            GENERATION_MODE)
+    word_rankings = get_word_rankings(root_dir, voice=VOICE)
 
-    wav_suffix = f"*{VOICE}.wav"
-
-    rankings = {}
-    for word in words:
-        word_dir = os.path.join(root_dir, word)
-        level_glob = glob(os.path.join(word_dir, 'level*'))
-
-        original_audio = glob(os.path.join(word_dir, 'level_0.00', wav_suffix))[0]
-
-        existing_score_fname = os.path.join(
-            word_dir, f'{word}_blabber_scored.json')
-
-        with open(existing_score_fname, 'r') as f:
-            existing_scores = json.load(f)
-
-        candidates = existing_scores['candidates']
-        df = pd.DataFrame(candidates)
-
-        graphemes = df['grapheme'].unique()
-
-        audio_files_dict = {}
-
-        audio_files = glob(os.path.join(word_dir, 'level*', wav_suffix))
-        graphemes = {
-            separate_grapheme_from_path(fname): fname for fname in \
-            audio_files
-        }
-        for grapheme, fname in graphemes.items():
-            if grapheme not in audio_files_dict.keys():
-                audio_files_dict[grapheme] = fname
-
-        perceptual_distances = perceptual_distance_calculation(
-            list(audio_files_dict.values()), original_audio, word)
-
-        tmp = [
-            df[df['grapheme'] == grapheme] for grapheme in \
-            df['grapheme'].unique()
-        ]
-        rankings[word] = {
-            x['grapheme'].iloc[0]: {
-                'phone_distance': x['phone_distance'].iloc[0],
-                'phone_similarity': x['phone_similarity'].iloc[0],
-                'perceptual_distance': perceptual_distances[
-                    x['grapheme'].iloc[0]
-                ]
-            } for x in tmp if x['grapheme'].iloc[0] in
-            perceptual_distances.keys()
-        }
-
-        df_out = pd.DataFrame(rankings[word]).T
-        df_out.to_json(os.path.join(word_dir, f"{word}_rankings.json"))
-
-    # TODO simplify this for a single level search with nsteps, min and max
-    # and a reject word criteria
-
+    # =================================================================
+    # IMPLEMENTATION
+    # =================================================================
     """
     Take from `Function call copy_v2.ipynb`
     """
@@ -811,14 +773,28 @@ if __name__ == "__main__":
     # -----------------------------------------------------------------
     # 2) Build template bank
     # -----------------------------------------------------------------
-    template_object = build_template_from_dataset(
-        template_days=template_days,
-        template_sessions=template_sessions,
-        nperseg=128,
-        noverlap=96,
-        eps=1e-8,
-        fmax=50,
-    )
+    # NOTE: cache for testing only, you can replace with your own template
+    # directory and file
+    temporary_cache_dir = '/scratch/raqchia/templates'
+    template_fname = os.path.join(temporary_cache_dir, 'template_obj.pkl')
+    os.makedirs(temporary_cache_dir, exist_ok=True)
+
+    overwrite = True
+
+    if os.path.exists(template_fname) and not overwrite:
+        with open(template_fname, 'rb') as f:
+            template_object = pickle.load(f)
+    else:
+        template_object = build_template_from_dataset(
+            template_days=template_days,
+            template_sessions=template_sessions,
+            nperseg=128,
+            noverlap=96,
+            eps=1e-8,
+            fmax=50,
+        )
+        with open(template_fname, 'wb') as f:
+            pickle.dump(template_object, f)
 
     # -----------------------------------------------------------------
     # 3) Load one reference trial
@@ -843,40 +819,58 @@ if __name__ == "__main__":
     )
     pprint.pprint(result)
 
-    # -----------------------------------------------------------------
-    # 5) Adapt comparison output and select asset
-    # -----------------------------------------------------------------
-    comparison = adapt_comparison_result(result)
-    pprint.pprint(comparison)
-    selection = select_triphone_global_asset(
-        comparison=comparison,
-        requested_voice=REQUESTED_VOICE,
+    # Simplified for a single level search with nsteps, min and max
+    # and a reject word criteria
+
+    # 'perceptual_distance': ascending=True
+    # 'phone_distance': ascending=True
+    # 'phone_similarity': ascending=False
+
+    # NOTE: for testing distances and debugging use:
+        # test_distance=0.15,
+        # print_debug=True
+
+    distorted_audio = select_triphone_asset_simplified(
+        label_name, result, word_rankings,
+        min_rank=0.2, max_rank=1.0, n_steps=10,
     )
 
-    # -----------------------------------------------------------------
-    # 6) Report chosen asset and ranking diagnostics
-    # -----------------------------------------------------------------
-    print("Selected asset:", selection["audio_path"])
-    print("Selected asset id:", selection["asset_id"])
-    print("Generation mode:", selection["generation_mode"])
-    print("Target level:", selection["target_level"])
-    print("Effective target level:", selection["effective_target_level"])
-    print("Target level info:", selection["target_level_info"])
-    print("Feedback mode:", selection["feedback_mode"])
-    print("Level policy:", selection["level_policy"], "high_level_min:", selection["high_level_min"])
-    print("Score details:", selection["score_details"])
-    print("Base score:", selection["base_score"])
-    print("Top candidates:")
-    pprint.pprint(selection["top_candidates"])
+    print("Selected triphone asset: ", distorted_audio)
 
-    if args.json_out:
-        out_path = Path(args.json_out)
-        if out_path.exists() and not args.overwrite:
-            raise FileExistsError(
-                f"Refusing to overwrite existing file: "\
-                f"{out_path}. Pass --overwrite to replace it."
-            )
-        out_path.write_text(
-            json.dumps(selection, indent=2, default=str),
-            encoding="utf-8"
-        )
+    # # -----------------------------------------------------------------
+    # # 5) Adapt comparison output and select asset
+    # # -----------------------------------------------------------------
+    # comparison = adapt_comparison_result(result)
+    # pprint.pprint(comparison)
+    # selection = select_triphone_global_asset(
+    #     comparison=comparison,
+    #     requested_voice=REQUESTED_VOICE,
+    # )
+
+    # # -----------------------------------------------------------------
+    # # 6) Report chosen asset and ranking diagnostics
+    # # -----------------------------------------------------------------
+    # print("Selected asset:", selection["audio_path"])
+    # print("Selected asset id:", selection["asset_id"])
+    # print("Generation mode:", selection["generation_mode"])
+    # print("Target level:", selection["target_level"])
+    # print("Effective target level:", selection["effective_target_level"])
+    # print("Target level info:", selection["target_level_info"])
+    # print("Feedback mode:", selection["feedback_mode"])
+    # print("Level policy:", selection["level_policy"], "high_level_min:", selection["high_level_min"])
+    # print("Score details:", selection["score_details"])
+    # print("Base score:", selection["base_score"])
+    # print("Top candidates:")
+    # pprint.pprint(selection["top_candidates"])
+
+    # if args.json_out:
+    #     out_path = Path(args.json_out)
+    #     if out_path.exists() and not args.overwrite:
+    #         raise FileExistsError(
+    #             f"Refusing to overwrite existing file: "\
+    #             f"{out_path}. Pass --overwrite to replace it."
+    #         )
+    #     out_path.write_text(
+    #         json.dumps(selection, indent=2, default=str),
+    #         encoding="utf-8"
+    #     )

@@ -36,12 +36,17 @@ import csv
 import json
 import math
 import re
+import os
 import sys
 import wave
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from glob import glob
+import requests
+import shutil
+import io
 
 import numpy as np
 import pandas as pd
@@ -68,6 +73,13 @@ ORIGINAL_ASSETS = f"{PARENT_DIR}/speech-assets-triphone/man/triphone/"
 RAY_ASSET_DIR = Path(f"{PARENT_DIR}/RayAssets/")
 ORIGINAL_VOICE = "piper"
 TRANSCRIPT_DIR = str(RAY_ASSET_DIR) + "/text-only/text/triphone/" 
+TRANSCRIPT_MAN_ASSET_DIR = RAY_ASSET_DIR / Path("man")
+TRANSCRIPT_WOMAN_ASSET_DIR = RAY_ASSET_DIR / Path("woman")
+
+ELEVENLABS_MODEL_ID = "eleven_multilingual_sts_v2"
+ELEVENLABS_VOICE_STRING = "Charlotte - Meditation and Relaxation Australian"
+ELEVENLABS_OUTPUT_FMT = "mp3_44100_128"
+_API_KEY = "sk_4fd5d4c0da1af329be0bc4b93901b6cd6ee4d720a2310133"
 
 @dataclass
 class Segment:
@@ -161,6 +173,88 @@ def write_wav_pcm(path: Path, sr: int, channels: int, sampwidth: int, data: np.n
         wf.setsampwidth(sampwidth)
         wf.setframerate(sr)
         wf.writeframes(out.tobytes())
+
+def wav_bytes_from_pcm(
+    sr: int, channels: int, sampwidth: int, data: np.ndarray
+) -> bytes:
+    buf = io.BytesIO()
+
+    if sampwidth == 1:
+        out = np.clip(data + 128, 0, 255).astype(np.uint8)
+    elif sampwidth == 2:
+        out = np.clip(data, -32768, 32767).astype(np.int16)
+    elif sampwidth == 4:
+        out = np.clip(data, -2147483648, 2147483647).astype(np.int32)
+    else:
+        raise ValueError(f"Unsupported sample width {sampwidth}")
+
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(sampwidth)
+        wf.setframerate(sr)
+        wf.writeframes(out.tobytes())
+
+    return buf.getvalue()
+
+
+def resolve_elevenlabs_voice_id(
+    voice_search: str,
+    api_key:str=_API_KEY,
+) -> str:
+    resp = requests.get(
+        "https://api.elevenlabs.io/v2/voices",
+        headers={"xi-api-key": api_key},
+        params={"search": voice_search, "page_size": 100},
+        timeout=30,
+    )
+    resp.raise_for_status()
+
+    voices = resp.json().get("voices", [])
+    if not voices:
+        raise SystemExit(f"No ElevenLabs voice found for search: {voice_search!r}")
+
+    exact = [
+        v for v in voices
+        if v.get("name", "").strip().lower() == voice_search.strip().lower()
+    ]
+    chosen = (exact or voices)[0]
+    print(f"Using ElevenLabs voice: {chosen.get('name')} ({chosen.get('voice_id')})")
+    return chosen["voice_id"]
+
+
+def elevenlabs_voice_change(
+    chunk: np.ndarray,
+    sr: int,
+    channels: int,
+    sampwidth: int,
+    api_key: str,
+    voice_id: str,
+    model_id: str,
+    output_format: str,
+    remove_background_noise: bool,
+) -> bytes:
+
+    audio_bytes = wav_bytes_from_pcm(sr, channels, sampwidth, chunk)
+
+    resp = requests.post(
+        f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_id}",
+        headers={"xi-api-key": api_key},
+        params={"output_format": output_format},
+        data={
+            "model_id": model_id,
+            "remove_background_noise": str(remove_background_noise).lower(),
+        },
+        files={"audio": ("chunk.wav", audio_bytes, "audio/wav")},
+        timeout=(10, 180),
+    )
+    if not resp.ok:
+        raise RuntimeError(f"ElevenLabs voice changer failed {resp.status_code}: {resp.text[:1000]}")
+    return resp.content
+
+
+def write_bytes(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
 
 
 def to_float_mono(data: np.ndarray, sampwidth: int) -> np.ndarray:
@@ -656,6 +750,52 @@ def candidates_by_text(candidates: Sequence[Candidate]) -> Dict[str, List[Candid
         grouped.setdefault(cand.candidate, []).append(cand)
     return grouped
 
+def set_transcript_triphone_path(gender, word):
+    if gender == 'man' or gender == 'male':
+        path = TRANSCRIPT_MAN_ASSET_DIR / Path('triphone') / Path(word)
+    else:
+        path = TRANSCRIPT_WOMAN_ASSET_DIR / Path('triphone') / Path(word)
+    return path
+
+def copy_json_scores(word, new_dir):
+    json_fname = new_dir / f"{word}_blabber_scored.json"
+    if not os.path.exists(json_fname):
+        original_json = Path(ORIGINAL_ASSETS) / \
+                word / f"{word}_blabber_scored.json"
+        shutil.copy(original_json, json_fname)
+
+def write_by_transcript_and_style(inp, chunk, aug_word, dry_run=False,
+                                  man_suffix='en-AU-Ray', sr=48000, channels=2,
+                                  sampwidth=100, woman_suffix='en-AU-Raychel'):
+    # This is where it separates to a new asset directory
+    voice_id = resolve_elevenlabs_voice_id(ELEVENLABS_VOICE_STRING)
+    man_dir = set_transcript_triphone_path('man', inp.word)
+    woman_dir = set_transcript_triphone_path('woman', inp.word)
+
+    copy_json_scores(inp.word, man_dir)
+
+    man_chunk = chunk
+    try:
+        woman_chunk = elevenlabs_voice_change(
+            chunk, sr, channels, sampwidth, _API_KEY, voice_id,
+            ELEVENLABS_MODEL_ID, ELEVENLABS_OUTPUT_FMT, False,
+        )
+        copy_json_scores(inp.word, woman_dir)
+        chunk_info = ([man_dir, man_suffix, man_chunk],
+                      [woman_dir, woman_suffix, woman_chunk])
+    except RuntimeError:
+        chunk_info = [[man_dir, man_suffix, man_chunk]]
+        warnings.warn("API is not a paid subscription. ElevenLabs voice "\
+                      "changer will not work")
+
+    # for all of these words: save
+    for m_dir, m_suffix, m_chunk in chunk_info:
+        m_fname = m_dir /  Path(aug_word + "_" + m_suffix + '.wav')
+        print("New asset path: ", m_fname)
+
+        if not dry_run:
+            write_wav_pcm(m_fname, sr, channels, sampwidth, chunk)
+
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="Chunk spoken blabber batches into run_full_lexicon-style WAV assets.")
@@ -715,24 +855,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not args.dry_run:
         create_all_level_dirs(args.out_root, words, args.bins)
 
-    """
-    candidates_by_word: Dict[str, List[Candidate]] = {}
-    for word in words:
-        scored = find_scored_json(word, wavs, args.out_root, args.scored_root, args.scored_json_name)
-        if scored is None:
-            if not args.allow_missing_scored:
-                raise SystemExit(
-                    f"No scored.json found for word '{word}'. Searched under --scored-root, --out-root, and input dirs. "
-                    f"Pass --scored-root /path/to/run_full_lexicon_output or use --allow-missing-scored for legacy naming."
-                )
-            candidates_by_word[word] = []
-            print(f"{word}: no scored.json found; using legacy naming", file=sys.stderr)
-        else:
-            cands = load_candidates(word, scored, args.bins, args.candidate_order, args.bin_assignment)
-            candidates_by_word[word] = cands
-            print(f"{word}: loaded {len(cands)} candidates from {scored}")
-    """
-
     # from the previously output triphone dataset, get the names across levels
     # with transcript and index
     word_cfg_dicts = []
@@ -782,19 +904,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(df)
 
     metadata_path = args.metadata or (args.out_root / "chunk_metadata.csv")
-    # rows: List[Dict[str, str]] = []
-    # next_candidate: Dict[str, int] = {w: 0 for w in words}
-    # legacy_next: Dict[str, int] = {w: 0 for w in words}
-    # representative_level = args.representative_level or level_labels(args.bins)[-1]
-    # reps_by_word: Dict[str, List[Candidate]] = {
-    #     w: representative_candidates(cands, representative_level, args.representative_order)
-    #     for w, cands in candidates_by_word.items()
-    # }
-    # by_text_by_word: Dict[str, Dict[str, List[Candidate]]] = {
-    #     w: candidates_by_text(cands)
-    #     for w, cands in candidates_by_word.items()
-    # }
-    # written_candidates: Dict[str, set[Tuple[int, str, int]]] = {w: set() for w in words}
 
     transcript_chunk_dict = {}
     for inp in wavs:
@@ -832,80 +941,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         for local_i, seg in enumerate(segments, start=1):
             local_idx = local_i - 1
             aug_idx = file_idx*10 + local_idx
-            # cands = candidates_by_word[inp.word]
-            # if cands:
-            #     if args.candidate_match_mode == "text":
-            #         reps = reps_by_word[inp.word]
-            #         ci = next_candidate[inp.word]
-            #         if ci >= len(reps):
-            #             print(
-            #                 f"Warning: extra chunk {local_i:02d} for '{inp.word}' has no original level {representative_level} representative. "
-            #                 f"Only {len(reps)} representative files exist; skipping this chunk to avoid string/audio mismatch.",
-            #                 file=sys.stderr,
-            #             )
-            #             next_candidate[inp.word] += 1
-            #             continue
-            #         rep = reps[ci]
-            #         next_candidate[inp.word] += 1
-            #         rep_key = candidate_key(rep)
-            #         targets = []
-            #         if rep_key not in written_candidates[inp.word]:
-            #             targets.append(rep)
-            #         for cand in by_text_by_word[inp.word].get(rep.candidate, []):
-            #             key = candidate_key(cand)
-            #             if key != rep_key and key not in written_candidates[inp.word]:
-            #                 targets.append(cand)
-            #         if not targets:
-            #             print(
-            #                 f"  {local_i:02d} -> no unwritten targets for candidate text {rep.candidate!r}; skipping duplicate chunk",
-            #                 file=sys.stderr,
-            #             )
-            #             continue
-            #     else:
-            #         ci = next_candidate[inp.word]
-            #         if ci >= len(cands):
-            #             raise SystemExit(
-            #                 f"Detected more chunks for '{inp.word}' than candidates in scored.json. "
-            #                 f"Next chunk would be candidate #{ci}, but only {len(cands)} candidates were loaded."
-            #             )
-            #         targets = [cands[ci]]
-            #         next_candidate[inp.word] += 1
-            # else:
-            #     legacy_next[inp.word] += 1
-            #     out_index = legacy_next[inp.word]
-            #     level = "1.00"
-            #     candidate_text = inp.word
-            #     distance = ""
-            #     out_path = Path(args.legacy_output_template.format(
-            #         out_root=str(args.out_root), word=inp.word, level=level, index=out_index, idx=out_index,
-            #         candidate=candidate_text, variant=candidate_text, suffix=args.suffix,
-            #     ))
-            #     chunk = data[seg.start_frame:seg.end_frame].copy()
-            #     chunk = peak_normalize(chunk, sampwidth, signal_cfg.peak_normalize_dbfs)
-            #     print(f"  {local_i:02d} -> {out_path}  [{seg.start_s:.3f}, {seg.end_s:.3f}] {seg.end_s-seg.start_s:.3f}s")
-            #     if not args.dry_run:
-            #         write_wav_pcm(out_path, sr, channels, sampwidth, chunk)
-
-            #     rows.append({
-            #         "input": str(inp.path),
-            #         "source_word": inp.word,
-            #         "batch": str(inp.batch),
-            #         "local_chunk_index": str(local_i),
-            #         "candidate_sequence_index": str(out_index),
-            #         "output_index": f"{out_index:04d}",
-            #         "level": level,
-            #         "candidate": candidate_text,
-            #         "distance": distance,
-            #         "output": str(out_path),
-            #         "start_s": f"{seg.start_s:.6f}",
-            #         "end_s": f"{seg.end_s:.6f}",
-            #         "duration_s": f"{seg.end_s-seg.start_s:.6f}",
-            #         "threshold_dbfs": f"{threshold:.3f}",
-            #         "noise_floor_dbfs": f"{noise_floor:.3f}",
-            #         "peak_dbfs": f"{seg.peak_dbfs:.3f}",
-            #         "rms_dbfs": f"{seg.rms_dbfs:.3f}",
-            #     })
-            #     continue
 
             chunk = data[seg.start_frame:seg.end_frame].copy()
             chunk = peak_normalize(chunk, sampwidth, signal_cfg.peak_normalize_dbfs)
@@ -913,7 +948,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             # This chunk is for this word and this augmentation, set to all
             # augmentation vocab and save to all new filenames
             aug_word = transcript[aug_idx]
-            # aug_word = transcript_dict[inp.word]['aug_word'].loc[aug_idx]
+
+            # This is where it separates to a new asset directory
+            write_by_transcript_and_style(
+                inp, chunk, aug_word, dry_run=args.dry_run,
+                man_suffix=args.suffix, sr=sr, channels=channels,
+                sampwidth=sampwidth, woman_suffix=args.suffix+"chel"
+            )
 
             # paired by string, the rest follows
             new_fnames = all_aug_df[
@@ -927,68 +968,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print(f"  {aug_idx:02d} -> {new_fname}  [{seg.start_s:.3f}, {seg.end_s:.3f}] {seg.end_s-seg.start_s:.3f}s")
                 if not args.dry_run:
                     write_wav_pcm(new_fname, sr, channels, sampwidth, chunk)
-
-
-            # for cand in targets:
-            #     out_path = format_output_path(args.output_template, args.out_root, inp.word, cand, args.suffix)
-            #     out_index = 0 if cand.output_index is None else cand.output_index
-            #     level = cand.output_level or cand.level
-            #     candidate_text = cand.candidate
-            #     distance = "" if cand.distance is None else f"{cand.distance:.9f}"
-            #     written_candidates[inp.word].add(candidate_key(cand))
-
-            #     print(f"  {local_i:02d} -> {out_path}  [{seg.start_s:.3f}, {seg.end_s:.3f}] {seg.end_s-seg.start_s:.3f}s")
-            #     if not args.dry_run:
-            #         write_wav_pcm(out_path, sr, channels, sampwidth, chunk)
-
-            #     rows.append({
-            #         "input": str(inp.path),
-            #         "source_word": inp.word,
-            #         "batch": str(inp.batch),
-            #         "local_chunk_index": str(local_i),
-            #         "candidate_sequence_index": str(next_candidate[inp.word] - 1),
-            #         "output_index": f"{out_index:04d}",
-            #         "level": level,
-            #         "candidate": candidate_text,
-            #         "distance": distance,
-            #         "output": str(out_path),
-            #         "start_s": f"{seg.start_s:.6f}",
-            #         "end_s": f"{seg.end_s:.6f}",
-            #         "duration_s": f"{seg.end_s-seg.start_s:.6f}",
-            #         "threshold_dbfs": f"{threshold:.3f}",
-            #         "noise_floor_dbfs": f"{noise_floor:.3f}",
-            #         "peak_dbfs": f"{seg.peak_dbfs:.3f}",
-            #         "rms_dbfs": f"{seg.rms_dbfs:.3f}",
-            #     })
-
-    # for word, cands in candidates_by_word.items():
-    #     if cands and args.candidate_match_mode == "text":
-    #         missing = [
-    #             cand for cand in cands
-    #             if candidate_key(cand) not in written_candidates[word]
-    #         ]
-    #         if missing:
-    #             missing_texts = sorted({cand.candidate for cand in missing})
-    #             print(
-    #                 f"Warning: wrote {len(cands) - len(missing)} candidates for '{word}', but scored.json has {len(cands)} candidates. "
-    #                 f"Missing candidate texts: {', '.join(missing_texts[:20])}"
-    #                 f"{' ...' if len(missing_texts) > 20 else ''}",
-    #                 file=sys.stderr,
-    #             )
-    #     elif cands and next_candidate[word] != len(cands):
-    #         print(
-    #             f"Warning: consumed {next_candidate[word]} chunks for '{word}', but scored.json has {len(cands)} candidates. "
-    #             f"Remaining candidates were not written.",
-    #             file=sys.stderr,
-    #         )
-
-#     if rows and not args.dry_run:
-#         metadata_path.parent.mkdir(parents=True, exist_ok=True)
-#         with metadata_path.open("w", newline="", encoding="utf-8") as f:
-#             writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-#             writer.writeheader()
-#             writer.writerows(rows)
-#         print(f"Wrote metadata: {metadata_path}")
 
     return 0
 
