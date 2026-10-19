@@ -70,19 +70,23 @@ from select_blabber_asset import (
 from select_blabber_asset_triphone import (
     load_assets, select_assets, asset_level,
     load_zimtohrli_audio, perceptual_distance_calculation,
-    create_ranking_matrix, load_ranking_json
+    create_ranking_matrix, load_ranking_json,
+    get_root_dir, get_word_dir, get_word_rankings,
+    select_triphone_asset_simplified
 )
 
 # TRIPHONE_ASSET_ROOT = ROOT_DIR + "speech-assets-triphone/"
 
-REQUESTED_VOICE = "man"
 # ROOT_DIR = "/data/raqchia/audio-assets/"
 # TRIPHONE_ASSET_ROOT = ROOT_DIR + "RayAssets"
 
 ROOT_DIR = "/projects/SSNFB/Ray/audio-assets/"
 TRIPHONE_ASSET_ROOT = ROOT_DIR + "ray-assets"
 GENERATION_MODE = "triphone-slowed"
-VOICE = 'en-AU-Ray'
+# man: en-AU-Ray
+# woman: en-AU-Raychel
+REQUESTED_VOICE = "woman"
+SPEAKER = 'en-AU-Raychel'
 
 # Selection-time level influence in `select_assets`:
 #   level_score = max(0, 1 - abs(asset_level - target_level))
@@ -125,6 +129,8 @@ CMVN_HOP = int(os.environ.get("CMVN_HOP", "256"))
 CMVN_N_MELS = int(os.environ.get("CMVN_N_MELS", "80"))
 CMVN_N_MFCC = int(os.environ.get("CMVN_N_MFCC", "32"))
 CMVN_DTW_MAX_FRAMES = int(os.environ.get("CMVN_DTW_MAX_FRAMES", "0"))
+
+VOCAB = ["go", "stop", "bath", "food", "yes", "no", "pain", "help",]
 
 LEXICON = {
     "go": ["G", "OW"],
@@ -639,96 +645,6 @@ def select_triphone_global_asset(comparison: dict, requested_voice: str) -> dict
         "per_time_l2": list(comparison["per_time_l2"]),
     }
 
-def get_root_dir():
-    root_dir = os.path.join(TRIPHONE_ASSET_ROOT, REQUESTED_VOICE,
-                            GENERATION_MODE)
-    return root_dir
-
-def get_word_dir(root_dir, word, voice=VOICE):
-    wav_suffix = f"*{voice}.wav"
-    word_dir = os.path.join(root_dir, word)
-    return word_dir
-
-def get_word_rankings(root_dir, voice=VOICE) -> dict:
-    word_rankings = {}
-    for word in LEXICON.keys():
-        word_dir = get_word_dir(root_dir, word, voice=voice)
-        try:
-            ranking = load_ranking_json(word, root_dir, voice=voice)
-            print(f"loaded rankings from {word} directory")
-        except:
-            create_ranking_matrix(root_dir, LEXICON, voice=VOICE)
-            ranking = load_ranking_json(word, root_dir, voice=voice)
-            print(f"created and loaded rankings from {word} directory")
-        ranking = pd.DataFrame(ranking)
-        word_rankings[word] = {
-            'directory': word_dir, 
-            'ranking': ranking
-        }
-
-    return word_rankings
-
-def select_triphone_asset_simplified(
-    word, result, word_rankings,
-    min_rank=0.0, max_rank=1.0, n_steps=10, voice='en-AU-Ray',
-    rank_by:str='perceptual_distance', ascending:bool=True,
-    test_distance=None, filetype='wav', print_debug:bool=False
-) -> dict:
-
-    word = word.lower()
-
-    directory = word_rankings[word]['directory']
-    ranking = word_rankings[word]['ranking']
-
-    ranking_sorted = ranking.sort_values(by=rank_by, ascending=ascending)
-    n_assets = len(ranking_sorted.index.to_list())
-
-    # from min and max acceptable rank id and the number of steps between the
-    # ranks: create lookup list
-    min_idx = int(n_assets*min_rank)
-    max_idx = int(np.ceil(n_assets*max_rank))
-    scaled_idx_list = np.arange(min_idx, max_idx)
-
-    n_scaled_assets = len(scaled_idx_list)
-
-    # raise warning if the number of steps is larger than the actual number of
-    # words
-    if n_steps > n_scaled_assets:
-        n_steps = n_scaled_assets
-        warnings.warn("Asset step count greater than number of assets. "\
-                      "Step count reset to max number of assets")
-
-    # construct the rankings to n_steps scaled from min and max ranks
-    min_max_idxs = np.linspace(min_idx, max_idx-1, n_steps).astype(int)
-    new_ranking = ranking_sorted.iloc[min_max_idxs]
-
-    # for the comparison signal coming in, average across the entire signal and
-    # get the closest asset according to the rank. 0 distance means closest
-    # to min and 1 distance means closest to max rank
-    if test_distance is None:
-        mean_distance = result['mean_l2']
-    else:
-        mean_distance = test_distance
-
-    asset_step = np.round(mean_distance * n_steps).astype(int)
-
-    distorted_word = new_ranking.iloc[asset_step].name
-    asset_path = os.path.join(
-        directory, f"{distorted_word}_{voice}.{filetype}"
-    )
-    assert os.path.exists(asset_path), f"Error: {asset_path} asset path "\
-            "does not exist"
-
-    if print_debug:
-        print("mean distance: ", np.round(mean_distance, 3))
-        print("n steps: ", n_steps)
-        print(new_ranking)
-        print("asset step: ", asset_step)
-
-
-    # return the asset path to play
-    return asset_path
-
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--json-out", default=None,
@@ -750,12 +666,16 @@ if __name__ == "__main__":
     # =================================================================
     # PREPARATION WORK
     # =================================================================
-    root_dir = get_root_dir()
+    root_dir = get_root_dir(
+        TRIPHONE_ASSET_ROOT,
+        voice=REQUESTED_VOICE,
+        generation_mode=GENERATION_MODE
+    )
 
     # -----------------------------------------------------------------
     # Create ranking matrix if it does not exist
     # -----------------------------------------------------------------
-    word_rankings = get_word_rankings(root_dir, voice=VOICE)
+    word_rankings = get_word_rankings(root_dir, VOCAB, speaker=SPEAKER)
 
     # =================================================================
     # IMPLEMENTATION
@@ -830,9 +750,10 @@ if __name__ == "__main__":
         # test_distance=0.15,
         # print_debug=True
 
+    ipdb.set_trace()
     distorted_audio = select_triphone_asset_simplified(
         label_name, result, word_rankings,
-        min_rank=0.2, max_rank=1.0, n_steps=10,
+        speaker=SPEAKER, min_rank=0.2, max_rank=1.0, n_steps=10,
     )
 
     print("Selected triphone asset: ", distorted_audio)

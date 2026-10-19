@@ -1,0 +1,488 @@
+[
+  {
+    "distance": "0.0_0.0_0.0_0.0",
+    "word": "help",
+    "new_word": "help",
+    "path": {
+      "man": "man/help/help_en-au-williamneural.wav",
+      "woman": "woman/help/help_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.0_0.0_0.5",
+    "word": "help",
+    "new_word": "hehlb",
+    "path": {
+      "man": "man/help/hehlb_en-au-williamneural.wav",
+      "woman": "woman/help/hehlb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.0_0.0_1.0",
+    "word": "help",
+    "new_word": "hehlt",
+    "path": {
+      "man": "man/help/hehlt_en-au-williamneural.wav",
+      "woman": "woman/help/hehlt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.0_1.0_0.0",
+    "word": "help",
+    "new_word": "hehrp",
+    "path": {
+      "man": "man/help/hehrp_en-au-williamneural.wav",
+      "woman": "woman/help/hehrp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.0_1.0_0.5",
+    "word": "help",
+    "new_word": "hehrb",
+    "path": {
+      "man": "man/help/hehrb_en-au-williamneural.wav",
+      "woman": "woman/help/hehrb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.0_1.0_1.0",
+    "word": "help",
+    "new_word": "hehrt",
+    "path": {
+      "man": "man/help/hehrt_en-au-williamneural.wav",
+      "woman": "woman/help/hehrt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_0.0_0.0",
+    "word": "help",
+    "new_word": "haylp",
+    "path": {
+      "man": "man/help/haylp_en-au-williamneural.wav",
+      "woman": "woman/help/haylp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_0.0_0.5",
+    "word": "help",
+    "new_word": "haylb",
+    "path": {
+      "man": "man/help/haylb_en-au-williamneural.wav",
+      "woman": "woman/help/haylb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_0.0_1.0",
+    "word": "help",
+    "new_word": "haylt",
+    "path": {
+      "man": "man/help/haylt_en-au-williamneural.wav",
+      "woman": "woman/help/haylt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_1.0_0.0",
+    "word": "help",
+    "new_word": "hayrp",
+    "path": {
+      "man": "man/help/hayrp_en-au-williamneural.wav",
+      "woman": "woman/help/hayrp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_1.0_0.5",
+    "word": "help",
+    "new_word": "hayrb",
+    "path": {
+      "man": "man/help/hayrb_en-au-williamneural.wav",
+      "woman": "woman/help/hayrb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_1.0_1.0",
+    "word": "help",
+    "new_word": "hayrt",
+    "path": {
+      "man": "man/help/hayrt_en-au-williamneural.wav",
+      "woman": "woman/help/hayrt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_0.0_0.0",
+    "word": "help",
+    "new_word": "halp",
+    "path": {
+      "man": "man/help/halp_en-au-williamneural.wav",
+      "woman": "woman/help/halp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_0.0_0.5",
+    "word": "help",
+    "new_word": "halb",
+    "path": {
+      "man": "man/help/halb_en-au-williamneural.wav",
+      "woman": "woman/help/halb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_0.0_1.0",
+    "word": "help",
+    "new_word": "halt",
+    "path": {
+      "man": "man/help/halt_en-au-williamneural.wav",
+      "woman": "woman/help/halt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_1.0_0.0",
+    "word": "help",
+    "new_word": "harp",
+    "path": {
+      "man": "man/help/harp_en-au-williamneural.wav",
+      "woman": "woman/help/harp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_1.0_0.5",
+    "word": "help",
+    "new_word": "harb",
+    "path": {
+      "man": "man/help/harb_en-au-williamneural.wav",
+      "woman": "woman/help/harb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_1.0_1.0",
+    "word": "help",
+    "new_word": "hart",
+    "path": {
+      "man": "man/help/hart_en-au-williamneural.wav",
+      "woman": "woman/help/hart_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_0.0_0.0",
+    "word": "help",
+    "new_word": "shehlp",
+    "path": {
+      "man": "man/help/shehlp_en-au-williamneural.wav",
+      "woman": "woman/help/shehlp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_0.0_0.5",
+    "word": "help",
+    "new_word": "shehlb",
+    "path": {
+      "man": "man/help/shehlb_en-au-williamneural.wav",
+      "woman": "woman/help/shehlb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_0.0_1.0",
+    "word": "help",
+    "new_word": "shehlt",
+    "path": {
+      "man": "man/help/shehlt_en-au-williamneural.wav",
+      "woman": "woman/help/shehlt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_1.0_0.0",
+    "word": "help",
+    "new_word": "shehrp",
+    "path": {
+      "man": "man/help/shehrp_en-au-williamneural.wav",
+      "woman": "woman/help/shehrp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_1.0_0.5",
+    "word": "help",
+    "new_word": "shehrb",
+    "path": {
+      "man": "man/help/shehrb_en-au-williamneural.wav",
+      "woman": "woman/help/shehrb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_1.0_1.0",
+    "word": "help",
+    "new_word": "shehrt",
+    "path": {
+      "man": "man/help/shehrt_en-au-williamneural.wav",
+      "woman": "woman/help/shehrt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_0.0_0.0",
+    "word": "help",
+    "new_word": "shaylp",
+    "path": {
+      "man": "man/help/shaylp_en-au-williamneural.wav",
+      "woman": "woman/help/shaylp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_0.0_0.5",
+    "word": "help",
+    "new_word": "shaylb",
+    "path": {
+      "man": "man/help/shaylb_en-au-williamneural.wav",
+      "woman": "woman/help/shaylb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_0.0_1.0",
+    "word": "help",
+    "new_word": "shaylt",
+    "path": {
+      "man": "man/help/shaylt_en-au-williamneural.wav",
+      "woman": "woman/help/shaylt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_1.0_0.0",
+    "word": "help",
+    "new_word": "shayrp",
+    "path": {
+      "man": "man/help/shayrp_en-au-williamneural.wav",
+      "woman": "woman/help/shayrp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_1.0_0.5",
+    "word": "help",
+    "new_word": "shayrb",
+    "path": {
+      "man": "man/help/shayrb_en-au-williamneural.wav",
+      "woman": "woman/help/shayrb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_1.0_1.0",
+    "word": "help",
+    "new_word": "shayrt",
+    "path": {
+      "man": "man/help/shayrt_en-au-williamneural.wav",
+      "woman": "woman/help/shayrt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_0.0_0.0",
+    "word": "help",
+    "new_word": "shalp",
+    "path": {
+      "man": "man/help/shalp_en-au-williamneural.wav",
+      "woman": "woman/help/shalp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_0.0_0.5",
+    "word": "help",
+    "new_word": "shalb",
+    "path": {
+      "man": "man/help/shalb_en-au-williamneural.wav",
+      "woman": "woman/help/shalb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_0.0_1.0",
+    "word": "help",
+    "new_word": "shalt",
+    "path": {
+      "man": "man/help/shalt_en-au-williamneural.wav",
+      "woman": "woman/help/shalt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_1.0_0.0",
+    "word": "help",
+    "new_word": "sharp",
+    "path": {
+      "man": "man/help/sharp_en-au-williamneural.wav",
+      "woman": "woman/help/sharp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_1.0_0.5",
+    "word": "help",
+    "new_word": "sharb",
+    "path": {
+      "man": "man/help/sharb_en-au-williamneural.wav",
+      "woman": "woman/help/sharb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_1.0_1.0",
+    "word": "help",
+    "new_word": "shart",
+    "path": {
+      "man": "man/help/shart_en-au-williamneural.wav",
+      "woman": "woman/help/shart_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_0.0_0.0",
+    "word": "help",
+    "new_word": "kehlp",
+    "path": {
+      "man": "man/help/kehlp_en-au-williamneural.wav",
+      "woman": "woman/help/kehlp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_0.0_0.5",
+    "word": "help",
+    "new_word": "kehlb",
+    "path": {
+      "man": "man/help/kehlb_en-au-williamneural.wav",
+      "woman": "woman/help/kehlb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_0.0_1.0",
+    "word": "help",
+    "new_word": "kehlt",
+    "path": {
+      "man": "man/help/kehlt_en-au-williamneural.wav",
+      "woman": "woman/help/kehlt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_1.0_0.0",
+    "word": "help",
+    "new_word": "kehrp",
+    "path": {
+      "man": "man/help/kehrp_en-au-williamneural.wav",
+      "woman": "woman/help/kehrp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_1.0_0.5",
+    "word": "help",
+    "new_word": "kehrb",
+    "path": {
+      "man": "man/help/kehrb_en-au-williamneural.wav",
+      "woman": "woman/help/kehrb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_1.0_1.0",
+    "word": "help",
+    "new_word": "kehrt",
+    "path": {
+      "man": "man/help/kehrt_en-au-williamneural.wav",
+      "woman": "woman/help/kehrt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_0.0_0.0",
+    "word": "help",
+    "new_word": "kaylp",
+    "path": {
+      "man": "man/help/kaylp_en-au-williamneural.wav",
+      "woman": "woman/help/kaylp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_0.0_0.5",
+    "word": "help",
+    "new_word": "kaylb",
+    "path": {
+      "man": "man/help/kaylb_en-au-williamneural.wav",
+      "woman": "woman/help/kaylb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_0.0_1.0",
+    "word": "help",
+    "new_word": "kaylt",
+    "path": {
+      "man": "man/help/kaylt_en-au-williamneural.wav",
+      "woman": "woman/help/kaylt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_1.0_0.0",
+    "word": "help",
+    "new_word": "kayrp",
+    "path": {
+      "man": "man/help/kayrp_en-au-williamneural.wav",
+      "woman": "woman/help/kayrp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_1.0_0.5",
+    "word": "help",
+    "new_word": "kayrb",
+    "path": {
+      "man": "man/help/kayrb_en-au-williamneural.wav",
+      "woman": "woman/help/kayrb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_1.0_1.0",
+    "word": "help",
+    "new_word": "kayrt",
+    "path": {
+      "man": "man/help/kayrt_en-au-williamneural.wav",
+      "woman": "woman/help/kayrt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_0.0_0.0",
+    "word": "help",
+    "new_word": "kalp",
+    "path": {
+      "man": "man/help/kalp_en-au-williamneural.wav",
+      "woman": "woman/help/kalp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_0.0_0.5",
+    "word": "help",
+    "new_word": "kalb",
+    "path": {
+      "man": "man/help/kalb_en-au-williamneural.wav",
+      "woman": "woman/help/kalb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_0.0_1.0",
+    "word": "help",
+    "new_word": "kalt",
+    "path": {
+      "man": "man/help/kalt_en-au-williamneural.wav",
+      "woman": "woman/help/kalt_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_1.0_0.0",
+    "word": "help",
+    "new_word": "karp",
+    "path": {
+      "man": "man/help/karp_en-au-williamneural.wav",
+      "woman": "woman/help/karp_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_1.0_0.5",
+    "word": "help",
+    "new_word": "karb",
+    "path": {
+      "man": "man/help/karb_en-au-williamneural.wav",
+      "woman": "woman/help/karb_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_1.0_1.0",
+    "word": "help",
+    "new_word": "kart",
+    "path": {
+      "man": "man/help/kart_en-au-williamneural.wav",
+      "woman": "woman/help/kart_en-au-natashaneural.wav"
+    }
+  }
+]

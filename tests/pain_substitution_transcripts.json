@@ -1,0 +1,245 @@
+[
+  {
+    "distance": "0.0_0.0_0.0",
+    "word": "pain",
+    "new_word": "payn",
+    "path": {
+      "man": "man/pain/payn_en-au-williamneural.wav",
+      "woman": "woman/pain/payn_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.0_0.5",
+    "word": "pain",
+    "new_word": "paym",
+    "path": {
+      "man": "man/pain/paym_en-au-williamneural.wav",
+      "woman": "woman/pain/paym_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.0_1.0",
+    "word": "pain",
+    "new_word": "payng",
+    "path": {
+      "man": "man/pain/payng_en-au-williamneural.wav",
+      "woman": "woman/pain/payng_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_0.0",
+    "word": "pain",
+    "new_word": "pehn",
+    "path": {
+      "man": "man/pain/pehn_en-au-williamneural.wav",
+      "woman": "woman/pain/pehn_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_0.5",
+    "word": "pain",
+    "new_word": "pehm",
+    "path": {
+      "man": "man/pain/pehm_en-au-williamneural.wav",
+      "woman": "woman/pain/pehm_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_1.0",
+    "word": "pain",
+    "new_word": "pehng",
+    "path": {
+      "man": "man/pain/pehng_en-au-williamneural.wav",
+      "woman": "woman/pain/pehng_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_0.0",
+    "word": "pain",
+    "new_word": "pan",
+    "path": {
+      "man": "man/pain/pan_en-au-williamneural.wav",
+      "woman": "woman/pain/pan_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_0.5",
+    "word": "pain",
+    "new_word": "pam",
+    "path": {
+      "man": "man/pain/pam_en-au-williamneural.wav",
+      "woman": "woman/pain/pam_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_1.0",
+    "word": "pain",
+    "new_word": "pang",
+    "path": {
+      "man": "man/pain/pang_en-au-williamneural.wav",
+      "woman": "woman/pain/pang_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_0.0",
+    "word": "pain",
+    "new_word": "bayn",
+    "path": {
+      "man": "man/pain/bayn_en-au-williamneural.wav",
+      "woman": "woman/pain/bayn_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_0.5",
+    "word": "pain",
+    "new_word": "baym",
+    "path": {
+      "man": "man/pain/baym_en-au-williamneural.wav",
+      "woman": "woman/pain/baym_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_1.0",
+    "word": "pain",
+    "new_word": "bayng",
+    "path": {
+      "man": "man/pain/bayng_en-au-williamneural.wav",
+      "woman": "woman/pain/bayng_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_0.0",
+    "word": "pain",
+    "new_word": "behn",
+    "path": {
+      "man": "man/pain/behn_en-au-williamneural.wav",
+      "woman": "woman/pain/behn_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_0.5",
+    "word": "pain",
+    "new_word": "behm",
+    "path": {
+      "man": "man/pain/behm_en-au-williamneural.wav",
+      "woman": "woman/pain/behm_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_1.0",
+    "word": "pain",
+    "new_word": "behng",
+    "path": {
+      "man": "man/pain/behng_en-au-williamneural.wav",
+      "woman": "woman/pain/behng_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_0.0",
+    "word": "pain",
+    "new_word": "ban",
+    "path": {
+      "man": "man/pain/ban_en-au-williamneural.wav",
+      "woman": "woman/pain/ban_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_0.5",
+    "word": "pain",
+    "new_word": "bam",
+    "path": {
+      "man": "man/pain/bam_en-au-williamneural.wav",
+      "woman": "woman/pain/bam_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_1.0",
+    "word": "pain",
+    "new_word": "bang",
+    "path": {
+      "man": "man/pain/bang_en-au-williamneural.wav",
+      "woman": "woman/pain/bang_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_0.0",
+    "word": "pain",
+    "new_word": "tayn",
+    "path": {
+      "man": "man/pain/tayn_en-au-williamneural.wav",
+      "woman": "woman/pain/tayn_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_0.5",
+    "word": "pain",
+    "new_word": "taym",
+    "path": {
+      "man": "man/pain/taym_en-au-williamneural.wav",
+      "woman": "woman/pain/taym_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_1.0",
+    "word": "pain",
+    "new_word": "tayng",
+    "path": {
+      "man": "man/pain/tayng_en-au-williamneural.wav",
+      "woman": "woman/pain/tayng_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_0.0",
+    "word": "pain",
+    "new_word": "tehn",
+    "path": {
+      "man": "man/pain/tehn_en-au-williamneural.wav",
+      "woman": "woman/pain/tehn_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_0.5",
+    "word": "pain",
+    "new_word": "tehm",
+    "path": {
+      "man": "man/pain/tehm_en-au-williamneural.wav",
+      "woman": "woman/pain/tehm_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_1.0",
+    "word": "pain",
+    "new_word": "tehng",
+    "path": {
+      "man": "man/pain/tehng_en-au-williamneural.wav",
+      "woman": "woman/pain/tehng_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_0.0",
+    "word": "pain",
+    "new_word": "tan",
+    "path": {
+      "man": "man/pain/tan_en-au-williamneural.wav",
+      "woman": "woman/pain/tan_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_0.5",
+    "word": "pain",
+    "new_word": "tam",
+    "path": {
+      "man": "man/pain/tam_en-au-williamneural.wav",
+      "woman": "woman/pain/tam_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_1.0",
+    "word": "pain",
+    "new_word": "tang",
+    "path": {
+      "man": "man/pain/tang_en-au-williamneural.wav",
+      "woman": "woman/pain/tang_en-au-natashaneural.wav"
+    }
+  }
+]

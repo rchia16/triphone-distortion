@@ -722,13 +722,12 @@ def perceptual_distance_calculation(
 
     return distances
 
-def create_ranking_matrix(root_dir, lexicon, voice='en-AU-Ray'):
-    words = list(lexicon.keys())
+def create_ranking_matrix(root_dir:str, vocab:list, speaker:str='en-AU-Ray'):
 
-    wav_suffix = f"{voice}.wav"
+    wav_suffix = f"{speaker}.wav"
 
     rankings = {}
-    for word in words:
+    for word in vocab:
         word_dir = os.path.join(root_dir, word)
 
         original_audio = glob(os.path.join(word_dir, f"{word}_{wav_suffix}"))[0]
@@ -776,11 +775,104 @@ def create_ranking_matrix(root_dir, lexicon, voice='en-AU-Ray'):
         df_out = pd.DataFrame(rankings[word]).T
         df_out.to_json(os.path.join(word_dir, f"{word}_rankings.json"))
 
-def load_ranking_json(word, root_dir, voice='en-AU-Ray'):
-    wav_suffix = f"*{voice}.wav"
+def load_ranking_json(word, root_dir, speaker='en-AU-Ray'):
+    wav_suffix = f"*{speaker}.wav"
     word_dir = os.path.join(root_dir, word)
     json_file = os.path.join(word_dir, f"{word}_rankings.json")
     return json.loads(Path(json_file).read_text())
+
+def get_root_dir(triphone_asset_root, voice='man',
+                 generation_mode='triphone-slowed'):
+    root_dir = os.path.join(
+        triphone_asset_root, voice, generation_mode
+    )
+    return root_dir
+
+def get_word_dir(root_dir, word, speaker='en-AU-Ray'):
+    wav_suffix = f"*{speaker}.wav"
+    word_dir = os.path.join(root_dir, word)
+    return word_dir
+
+def get_word_rankings(root_dir:str, vocab:list, speaker:str='en-AU-Ray') -> dict:
+    word_rankings = {}
+    for word in vocab:
+        word_dir = get_word_dir(root_dir, word, speaker=speaker)
+        try:
+            ranking = load_ranking_json(word, root_dir, speaker=speaker)
+            print(f"loaded rankings from {word} directory")
+        except:
+            create_ranking_matrix(root_dir, vocab, speaker=speaker)
+            ranking = load_ranking_json(word, root_dir, speaker=speaker)
+            print(f"created and loaded rankings from {word} directory")
+        ranking = pd.DataFrame(ranking)
+        word_rankings[word] = {
+            'directory': word_dir, 
+            'ranking': ranking
+        }
+
+    return word_rankings
+
+def select_triphone_asset_simplified(
+    word, result, word_rankings,
+    min_rank=0.0, max_rank=1.0, n_steps=10, speaker='en-AU-Ray',
+    rank_by:str='perceptual_distance', ascending:bool=True,
+    test_distance=None, filetype='wav', print_debug:bool=False
+) -> dict:
+
+    word = word.lower()
+
+    directory = word_rankings[word]['directory']
+    ranking = word_rankings[word]['ranking']
+
+    ranking_sorted = ranking.sort_values(by=rank_by, ascending=ascending)
+    n_assets = len(ranking_sorted.index.to_list())
+
+    # from min and max acceptable rank id and the number of steps between the
+    # ranks: create lookup list
+    min_idx = int(n_assets*min_rank)
+    max_idx = int(np.ceil(n_assets*max_rank))
+    scaled_idx_list = np.arange(min_idx, max_idx)
+
+    n_scaled_assets = len(scaled_idx_list)
+
+    # raise warning if the number of steps is larger than the actual number of
+    # words
+    if n_steps > n_scaled_assets:
+        n_steps = n_scaled_assets
+        warnings.warn("Asset step count greater than number of assets. "\
+                      "Step count reset to max number of assets")
+
+    # construct the rankings to n_steps scaled from min and max ranks
+    min_max_idxs = np.linspace(min_idx, max_idx-1, n_steps).astype(int)
+    new_ranking = ranking_sorted.iloc[min_max_idxs]
+
+    # for the comparison signal coming in, average across the entire signal and
+    # get the closest asset according to the rank. 0 distance means closest
+    # to min and 1 distance means closest to max rank
+    if test_distance is None:
+        mean_distance = result['mean_l2']
+    else:
+        mean_distance = test_distance
+
+    asset_step = np.round(mean_distance * n_steps).astype(int)
+
+    distorted_word = new_ranking.iloc[asset_step].name
+    asset_path = os.path.join(
+        directory, f"{distorted_word}_{speaker}.{filetype}"
+    )
+    assert os.path.exists(asset_path), f"Error: {asset_path} asset path "\
+            "does not exist"
+
+    if print_debug:
+        print("mean distance: ", np.round(mean_distance, 3))
+        print("n steps: ", n_steps)
+        print(new_ranking)
+        print("asset step: ", asset_step)
+
+
+    # return the asset path to play
+    return asset_path
+
 
 def main() -> None:
     p = argparse.ArgumentParser()

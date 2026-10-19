@@ -1,0 +1,760 @@
+{
+  "bath:0:B:onset_single": [
+    {
+      "phone": "B",
+      "role": "onset_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "bath"
+    },
+    {
+      "phone": "P",
+      "role": "onset_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.25,
+      "raw_panphon_distance": 0.25,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "path"
+    },
+    {
+      "phone": "D",
+      "role": "onset_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 1.125,
+      "raw_panphon_distance": 1.125,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "dath"
+    }
+  ],
+  "bath:1:AE:nucleus": [
+    {
+      "phone": "AE",
+      "role": "nucleus",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "bath"
+    },
+    {
+      "phone": "EH",
+      "role": "nucleus",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.5,
+      "raw_panphon_distance": 0.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "behth"
+    },
+    {
+      "phone": "EY",
+      "role": "nucleus",
+      "rank_distance": 1.0,
+      "adjusted_distance": 0.5,
+      "raw_panphon_distance": 0.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "bayth"
+    }
+  ],
+  "bath:2:TH:coda_single": [
+    {
+      "phone": "TH",
+      "role": "coda_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "bath"
+    },
+    {
+      "phone": "DH",
+      "role": "coda_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.25,
+      "raw_panphon_distance": 0.25,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "badh"
+    },
+    {
+      "phone": "S",
+      "role": "coda_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 0.5,
+      "raw_panphon_distance": 0.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "bas"
+    }
+  ],
+  "food:0:F:onset_single": [
+    {
+      "phone": "F",
+      "role": "onset_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "food"
+    },
+    {
+      "phone": "V",
+      "role": "onset_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.25,
+      "raw_panphon_distance": 0.25,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "vood"
+    },
+    {
+      "phone": "S",
+      "role": "onset_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 1.125,
+      "raw_panphon_distance": 1.125,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "sood"
+    }
+  ],
+  "food:1:UW:nucleus": [
+    {
+      "phone": "UW",
+      "role": "nucleus",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "food"
+    },
+    {
+      "phone": "UH",
+      "role": "nucleus",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.75,
+      "raw_panphon_distance": 0.75,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "fud"
+    },
+    {
+      "phone": "OW",
+      "role": "nucleus",
+      "rank_distance": 1.0,
+      "adjusted_distance": 1.0,
+      "raw_panphon_distance": 1.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "fohd"
+    }
+  ],
+  "food:2:D:coda_single": [
+    {
+      "phone": "D",
+      "role": "coda_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "food"
+    },
+    {
+      "phone": "T",
+      "role": "coda_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.25,
+      "raw_panphon_distance": 0.25,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "foot"
+    },
+    {
+      "phone": "B",
+      "role": "coda_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 1.125,
+      "raw_panphon_distance": 1.125,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "foob"
+    }
+  ],
+  "go:0:G:onset_single": [
+    {
+      "phone": "G",
+      "role": "onset_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "go"
+    },
+    {
+      "phone": "K",
+      "role": "onset_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.25,
+      "raw_panphon_distance": 0.25,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "koh"
+    },
+    {
+      "phone": "B",
+      "role": "onset_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 2.0,
+      "raw_panphon_distance": 2.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "boh"
+    }
+  ],
+  "go:1:OW:nucleus": [
+    {
+      "phone": "OW",
+      "role": "nucleus",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "go"
+    },
+    {
+      "phone": "AO",
+      "role": "nucleus",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.25,
+      "raw_panphon_distance": 0.25,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "gaw"
+    },
+    {
+      "phone": "AH",
+      "role": "nucleus",
+      "rank_distance": 1.0,
+      "adjusted_distance": 0.5,
+      "raw_panphon_distance": 0.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "guh"
+    }
+  ],
+  "stop:0:S:onset_cluster_first": [
+    {
+      "phone": "S",
+      "role": "onset_cluster_first",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "stop"
+    },
+    {
+      "phone": "TH",
+      "role": "onset_cluster_first",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.5,
+      "raw_panphon_distance": 0.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "thtop"
+    },
+    {
+      "phone": "SH",
+      "role": "onset_cluster_first",
+      "rank_distance": 1.0,
+      "adjusted_distance": 0.75,
+      "raw_panphon_distance": 0.75,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "shtop"
+    }
+  ],
+  "stop:1:T:onset_cluster_later": [
+    {
+      "phone": "T",
+      "role": "onset_cluster_later",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "stop"
+    },
+    {
+      "phone": "P",
+      "role": "onset_cluster_later",
+      "rank_distance": 0.5,
+      "adjusted_distance": 1.125,
+      "raw_panphon_distance": 1.125,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "spop"
+    },
+    {
+      "phone": "K",
+      "role": "onset_cluster_later",
+      "rank_distance": 1.0,
+      "adjusted_distance": 2.125,
+      "raw_panphon_distance": 2.125,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "skop"
+    }
+  ],
+  "stop:2:O:nucleus": [
+    {
+      "phone": "O",
+      "role": "nucleus",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "stop"
+    },
+    {
+      "phone": "OW",
+      "role": "nucleus",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.5,
+      "raw_panphon_distance": 0.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "stohp"
+    },
+    {
+      "phone": "AA",
+      "role": "nucleus",
+      "rank_distance": 1.0,
+      "adjusted_distance": 0.75,
+      "raw_panphon_distance": 0.75,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "stahp"
+    }
+  ],
+  "stop:3:P:coda_single": [
+    {
+      "phone": "P",
+      "role": "coda_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "stop"
+    },
+    {
+      "phone": "B",
+      "role": "coda_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.25,
+      "raw_panphon_distance": 0.25,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "stob"
+    },
+    {
+      "phone": "T",
+      "role": "coda_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 1.125,
+      "raw_panphon_distance": 1.125,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "stot"
+    }
+  ],
+  "no:0:N:onset_single": [
+    {
+      "phone": "N",
+      "role": "onset_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "no"
+    },
+    {
+      "phone": "M",
+      "role": "onset_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 1.125,
+      "raw_panphon_distance": 1.125,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "moh"
+    },
+    {
+      "phone": "L",
+      "role": "onset_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 2.5,
+      "raw_panphon_distance": 2.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 2,
+      "grapheme": "loh"
+    }
+  ],
+  "no:1:OW:nucleus": [
+    {
+      "phone": "OW",
+      "role": "nucleus",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "no"
+    },
+    {
+      "phone": "AO",
+      "role": "nucleus",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.25,
+      "raw_panphon_distance": 0.25,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "naw"
+    },
+    {
+      "phone": "AH",
+      "role": "nucleus",
+      "rank_distance": 1.0,
+      "adjusted_distance": 0.5,
+      "raw_panphon_distance": 0.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "nuh"
+    }
+  ],
+  "pain:0:P:onset_single": [
+    {
+      "phone": "P",
+      "role": "onset_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "payn"
+    },
+    {
+      "phone": "B",
+      "role": "onset_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.25,
+      "raw_panphon_distance": 0.25,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "bayn"
+    },
+    {
+      "phone": "T",
+      "role": "onset_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 1.125,
+      "raw_panphon_distance": 1.125,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "tayn"
+    }
+  ],
+  "pain:1:EY:nucleus": [
+    {
+      "phone": "EY",
+      "role": "nucleus",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "payn"
+    },
+    {
+      "phone": "EH",
+      "role": "nucleus",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "pehn"
+    },
+    {
+      "phone": "AE",
+      "role": "nucleus",
+      "rank_distance": 1.0,
+      "adjusted_distance": 0.5,
+      "raw_panphon_distance": 0.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "pan"
+    }
+  ],
+  "pain:2:N:coda_single": [
+    {
+      "phone": "N",
+      "role": "coda_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "payn"
+    },
+    {
+      "phone": "M",
+      "role": "coda_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 1.125,
+      "raw_panphon_distance": 1.125,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "paym"
+    },
+    {
+      "phone": "NG",
+      "role": "coda_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 2.125,
+      "raw_panphon_distance": 2.125,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "payng"
+    }
+  ],
+  "yes:0:Y:onset_single": [
+    {
+      "phone": "Y",
+      "role": "onset_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "yes"
+    },
+    {
+      "phone": "W",
+      "role": "onset_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 1.5,
+      "raw_panphon_distance": 1.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "wehs"
+    },
+    {
+      "phone": "R",
+      "role": "onset_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 1.875,
+      "raw_panphon_distance": 1.625,
+      "context_penalty": 0.0,
+      "relaxation_level": 1,
+      "grapheme": "rehs"
+    }
+  ],
+  "yes:1:EH:nucleus": [
+    {
+      "phone": "EH",
+      "role": "nucleus",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "yes"
+    },
+    {
+      "phone": "EY",
+      "role": "nucleus",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "yays"
+    },
+    {
+      "phone": "AE",
+      "role": "nucleus",
+      "rank_distance": 1.0,
+      "adjusted_distance": 0.5,
+      "raw_panphon_distance": 0.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "yas"
+    }
+  ],
+  "yes:2:S:coda_single": [
+    {
+      "phone": "S",
+      "role": "coda_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "yes"
+    },
+    {
+      "phone": "Z",
+      "role": "coda_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.25,
+      "raw_panphon_distance": 0.25,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "yez"
+    },
+    {
+      "phone": "TH",
+      "role": "coda_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 0.5,
+      "raw_panphon_distance": 0.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "yeth"
+    }
+  ],
+  "help:0:HH:onset_single": [
+    {
+      "phone": "HH",
+      "role": "onset_single",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "help"
+    },
+    {
+      "phone": "SH",
+      "role": "onset_single",
+      "rank_distance": 0.5,
+      "adjusted_distance": 3.375,
+      "raw_panphon_distance": 3.375,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "shehlp"
+    },
+    {
+      "phone": "K",
+      "role": "onset_single",
+      "rank_distance": 1.0,
+      "adjusted_distance": 3.5,
+      "raw_panphon_distance": 3.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "kehlp"
+    }
+  ],
+  "help:1:EH:nucleus": [
+    {
+      "phone": "EH",
+      "role": "nucleus",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "help"
+    },
+    {
+      "phone": "EY",
+      "role": "nucleus",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "haylp"
+    },
+    {
+      "phone": "AE",
+      "role": "nucleus",
+      "rank_distance": 1.0,
+      "adjusted_distance": 0.5,
+      "raw_panphon_distance": 0.5,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "halp"
+    }
+  ],
+  "help:2:L:coda_cluster": [
+    {
+      "phone": "L",
+      "role": "coda_cluster",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "help"
+    },
+    {
+      "phone": "R",
+      "role": "coda_cluster",
+      "rank_distance": 1.0,
+      "adjusted_distance": 4.25,
+      "raw_panphon_distance": 3.5,
+      "context_penalty": 0.75,
+      "relaxation_level": 0,
+      "grapheme": "hehrp"
+    }
+  ],
+  "help:3:P:coda_cluster": [
+    {
+      "phone": "P",
+      "role": "coda_cluster",
+      "rank_distance": 0.0,
+      "adjusted_distance": 0.0,
+      "raw_panphon_distance": 0.0,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "help"
+    },
+    {
+      "phone": "B",
+      "role": "coda_cluster",
+      "rank_distance": 0.5,
+      "adjusted_distance": 0.25,
+      "raw_panphon_distance": 0.25,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "hehlb"
+    },
+    {
+      "phone": "T",
+      "role": "coda_cluster",
+      "rank_distance": 1.0,
+      "adjusted_distance": 1.125,
+      "raw_panphon_distance": 1.125,
+      "context_penalty": 0.0,
+      "relaxation_level": 0,
+      "grapheme": "hehlt"
+    }
+  ]
+}

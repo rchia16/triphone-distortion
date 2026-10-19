@@ -68,9 +68,9 @@ Important output fields:
   audio_path                 final selected stitched WAV
   target_signal              desired per-phoneme distortion values
   selected_phoneme_grades    closest granularity-bin tuple
-  actual_phone_distances     normalized CMVN auditory distances
+  actual_phone_distances     normalized Zimtohrli perceptual distances
   generated_phones           phonemes stitched into the WAV
-  cmvn_pairwise_distances    cleaned-phone CMVN/MFCC/DTW distance cache
+  perceptual_pairwise_distances cleaned-phone Zimtohrli distance cache
 """
 
 from __future__ import annotations
@@ -83,19 +83,12 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import wave
 from typing import Any
 
 import numpy as np
-
-from my_test import (
-    _cmvn,
-    _extract_mfcc,
-    _resample_time_axis,
-    _dtw_distance,
-    CMVN_DTW_MAX_FRAMES,
-)
 
 from deep_phone_candidate_stack_blabber_triphone import (
     PHONE_FEATURES,
@@ -107,9 +100,11 @@ from select_blabber_asset import normalize_voice_mode
 TOP_K_DEBUG = 10
 
 PREVIEW_WORDS = ("yes", "no", "bath", "pain", "help", "food", "go", "stop")
+# Keep lexical phones separate from spelling: go/no use long OW -> oʊ,
+# while stop uses short OH -> ɒ in the Australian phone inventory.
 PREVIEW_LEXICON: dict[str, list[str]] = {
     "go": ["G", "OW"],
-    "stop": ["S", "T", "OW", "P"],
+    "stop": ["S", "T", "OH", "P"],
     "bath": ["B", "AE", "TH"],
     "food": ["F", "UW", "D"],
     "yes": ["Y", "EH", "S"],
@@ -121,7 +116,62 @@ PREVIEW_LEXICON: dict[str, list[str]] = {
 DEFAULT_PHONE_INVENTORY_ROOT = "/projects/SSNFB/Ray/audio-assets/aus-phones/cleaned"
 DEFAULT_OUTPUT_ROOT = "/projects/SSNFB/Ray/audio-assets/per-phoneme"
 DEFAULT_REQUESTED_VOICE = "man"
-DEFAULT_MAX_PHONE_RANK = 4
+DEFAULT_MAX_PHONE_RANK = 6
+
+PHONE_TO_GRAPHEME: dict[str, str] = {
+    "P": "p",
+    "B": "b",
+    "T": "t",
+    "D": "d",
+    "K": "k",
+    "G": "g",
+    "S": "s",
+    "Z": "z",
+    "SH": "sh",
+    "ZH": "zh",
+    "CH": "ch",
+    "JH": "j",
+    "TH": "th",
+    "DH": "dh",
+    "F": "f",
+    "V": "v",
+    "HH": "h",
+    "M": "m",
+    "N": "n",
+    "NG": "ng",
+    "L": "l",
+    "R": "r",
+    "Y": "y",
+    "W": "w",
+    "IH": "i",
+    "IY": "ee",
+    "EH": "e",
+    "AE": "a",
+    "AH": "u",
+    "AX": "u",
+    "AA": "a",
+    "OH": "o",
+    "AO": "aw",
+    "UH": "u",
+    "UW": "oo",
+    "ER": "er",
+    "OW": "o",
+    "EY": "ai",
+    "AY": "igh",
+    "AW": "ow",
+    "OY": "oy",
+}
+
+PREVIEW_GRAPHEME_SEGMENTS: dict[str, list[str]] = {
+    "go": ["g", "o"],
+    "stop": ["s", "t", "o", "p"],
+    "bath": ["b", "a", "th"],
+    "food": ["f", "oo", "d"],
+    "yes": ["y", "e", "s"],
+    "no": ["n", "o"],
+    "pain": ["p", "ai", "n"],
+    "help": ["h", "e", "l", "p"],
+}
 
 
 ARPABET_TO_AUS_IPA_CANDIDATES: dict[str, list[str]] = {
@@ -156,6 +206,7 @@ ARPABET_TO_AUS_IPA_CANDIDATES: dict[str, list[str]] = {
     "AH": ["ʌ", "ə"],
     "AX": ["ə", "ʌ"],
     "AA": ["a", "ɒ"],
+    "OH": ["ɒ"],
     "AO": ["ɔ", "ɒ"],
     "UH": ["ʊ"],
     "UW": ["u"],
@@ -278,6 +329,40 @@ def output_distance_key(values: tuple[float, ...] | list[float], min_components:
     return distance_key(padded)
 
 
+def phone_to_grapheme(phone: str) -> str:
+    normalized = strip_cmudict_stress(phone)
+    return PHONE_TO_GRAPHEME.get(normalized, normalized.lower())
+
+
+def candidate_grapheme_for_generated_phones(
+    *,
+    word: str,
+    canonical: list[str],
+    generated: list[str],
+) -> str:
+    word = word.strip().lower()
+    if list(generated) == list(canonical):
+        return word
+
+    canonical_segments = PREVIEW_GRAPHEME_SEGMENTS.get(word)
+    if canonical_segments is None or len(canonical_segments) != len(canonical):
+        canonical_segments = [phone_to_grapheme(phone) for phone in canonical]
+
+    segments: list[str] = []
+    for idx, generated_phone in enumerate(generated):
+        if idx < len(canonical) and generated_phone == canonical[idx]:
+            segments.append(canonical_segments[idx])
+        else:
+            segments.append(phone_to_grapheme(generated_phone))
+
+    return "".join(segments)
+
+
+def per_phoneme_grapheme_json_path(output_root: str | Path, voice_mode: str, word: str) -> Path:
+    word = word.strip().lower()
+    return Path(output_root) / normalize_voice_mode(voice_mode) / word / f"{word}_grapheme.json"
+
+
 def effective_output_root(output_root: str | Path, granularity: int) -> Path:
     root = Path(output_root)
     suffix = f"granularity_{int(granularity)}"
@@ -298,7 +383,7 @@ def phone_options_by_distance(
         labels[strip_cmudict_stress(candidate)] = label
     for candidate, distance in row.items():
         candidate_key = strip_cmudict_stress(candidate)
-        label = labels.get(candidate_key, f"cmvn:{source}->{candidate_key}")
+        label = labels.get(candidate_key, f"perceptual:{source}->{candidate_key}")
         options[candidate_key] = (candidate_key, float(distance), label)
     return sorted(options.values(), key=lambda item: (item[1], item[0]))
 
@@ -308,7 +393,7 @@ def select_phones_for_distance_tuple(
     pairwise_distances: dict[str, Any],
     max_phone_rank: int = DEFAULT_MAX_PHONE_RANK,
 ) -> tuple[list[str], list[float], list[str]]:
-    """Select one generated phone per slot using normalized CMVN auditory distance."""
+    """Select one generated phone per slot using normalized perceptual distance."""
     phones: list[str] = []
     actual_distances: list[float] = []
     operations: list[str] = []
@@ -557,9 +642,9 @@ def stitch_phone_assets(
 
 
 
-def cmvn_pairwise_cache_path(inventory_root: Path) -> Path:
-    """Cache path for phone-audio pairwise CMVN/MFCC/DTW distances."""
-    return inventory_root / "cmvn_pairwise_distances.json"
+def perceptual_pairwise_cache_path(inventory_root: Path) -> Path:
+    """Cache path for phone-audio pairwise Zimtohrli perceptual distances."""
+    return inventory_root / "perceptual_pairwise_distances.json"
 
 
 def available_inventory_phone_assets(inventory_root: Path) -> dict[str, Path]:
@@ -575,18 +660,84 @@ def available_inventory_phone_assets(inventory_root: Path) -> dict[str, Path]:
     return assets
 
 
-def _cmvn_features_from_phone_asset(path: Path) -> np.ndarray:
-    """Extract CMVN-normalized MFCC features for one isolated phone asset."""
-    sample_rate, audio = decode_phone_asset_to_audio(path, sample_rate=24000)
-    features = _cmvn(_extract_mfcc(audio, sample_rate))
-    if CMVN_DTW_MAX_FRAMES > 0 and features.size:
-        features = _resample_time_axis(features, CMVN_DTW_MAX_FRAMES)
-    return features
+def _zimtohrli_audio_from_phone_asset(path: Path) -> np.ndarray:
+    """Decode one isolated phone asset to the 48 kHz mono float input Zimtohrli expects."""
+    _sample_rate, audio = decode_phone_asset_to_audio(path, sample_rate=48000)
+    return np.ascontiguousarray(audio, dtype=np.float32)
+
+
+_ZIMTOHRLI_PAIR_DISTANCE_CHILD = r"""
+import json
+import os
+import sys
+from pathlib import Path
+
+import zimtohrli
+
+from per_phoneme import _zimtohrli_audio_from_phone_asset
+
+left_path = Path(sys.argv[1])
+right_path = Path(sys.argv[2])
+
+metric = zimtohrli.Pyohrli()
+left_audio = _zimtohrli_audio_from_phone_asset(left_path)
+right_audio = _zimtohrli_audio_from_phone_asset(right_path)
+left_spec = metric.analyze(left_audio)
+right_spec = metric.analyze(right_audio)
+distance = float(metric.distance(left_spec, right_spec))
+
+os.write(1, (json.dumps({"distance": distance}) + "\n").encode("utf-8"))
+os._exit(0)
+"""
+
+
+def isolated_zimtohrli_pair_distance(
+    left_path: Path,
+    right_path: Path,
+    *,
+    timeout_sec: float = 120.0,
+) -> float:
+    """Compute one Zimtohrli distance in a child process to isolate native crashes."""
+    script_dir = Path(__file__).resolve().parent
+    env = dict(os.environ)
+    existing_pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = (
+        str(script_dir)
+        if not existing_pythonpath
+        else str(script_dir) + os.pathsep + existing_pythonpath
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _ZIMTOHRLI_PAIR_DISTANCE_CHILD,
+            str(left_path),
+            str(right_path),
+        ],
+        cwd=str(script_dir),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=float(timeout_sec),
+        check=False,
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        stdout = (result.stdout or "").strip()
+        message = stderr or stdout or f"process exited with status {result.returncode}"
+        raise RuntimeError(message)
+
+    lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+    if not lines:
+        raise RuntimeError("Zimtohrli child process produced no distance output.")
+    return float(json.loads(lines[-1])["distance"])
 
 
 def normalize_pairwise_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """
-    Add normalized [0,1] auditory distances while preserving raw CMVN-DTW.
+    Add normalized [0,1] auditory distances while preserving raw perceptual distances.
     """
     raw_distances = payload.get("raw_distances") or payload.get("distances") or {}
 
@@ -595,7 +746,7 @@ def normalize_pairwise_payload(payload: dict[str, Any]) -> dict[str, Any]:
         for value in row.values():
             raw_max = max(raw_max, float(value))
 
-    # 1.0 maps to the furthest raw CMVN-DTW phone-pair distance in this cache.
+    # 1.0 maps to the furthest raw perceptual phone-pair distance in this cache.
     effective_max = raw_max
 
     normalized: dict[str, dict[str, float]] = {}
@@ -622,74 +773,84 @@ def normalize_pairwise_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def build_cmvn_pairwise_distances(inventory_root: Path) -> dict[str, Any]:
+def build_perceptual_pairwise_distances(inventory_root: Path) -> dict[str, Any]:
     """
-    Build pairwise auditory distances from the cleaned phoneme asset library.
+    Build pairwise perceptual distances from the cleaned phoneme asset library.
 
-    Distance = CMVN-normalized MFCC + DTW. Raw distances are kept and normalized
-    to [0,1] using normalize_pairwise_payload().
+    Distance = Zimtohrli Pyohrli perceptual distance. Raw distances are kept and
+    normalized to [0,1] using normalize_pairwise_payload().
     """
     phone_assets = available_inventory_phone_assets(inventory_root)
     if not phone_assets:
         raise FileNotFoundError(f"No cleaned phone assets found in inventory root: {inventory_root}")
 
-    phone_features: dict[str, np.ndarray] = {}
-    skipped: dict[str, str] = {}
-
-    for phone, path in sorted(phone_assets.items()):
-        try:
-            features = _cmvn_features_from_phone_asset(path)
-            if features.size == 0:
-                skipped[phone] = "empty_features"
-            else:
-                phone_features[phone] = features
-        except Exception as exc:
-            skipped[phone] = str(exc)
-
-    phones = sorted(phone_features)
+    phones = sorted(phone_assets)
     raw_distances: dict[str, dict[str, float]] = {phone: {} for phone in phones}
+    skipped_pairs: dict[str, str] = {}
+    successful_pair_count = 0
 
     for idx, source in enumerate(phones):
         for target in phones[idx:]:
             if source == target:
                 distance = 0.0
             else:
-                distance = float(_dtw_distance(phone_features[source], phone_features[target]))
+                try:
+                    distance = isolated_zimtohrli_pair_distance(
+                        phone_assets[source],
+                        phone_assets[target],
+                    )
+                except Exception as exc:
+                    skipped_pairs[f"{source}->{target}"] = str(exc)
+                    continue
+                successful_pair_count += 1
             raw_distances[source][target] = distance
             raw_distances[target][source] = distance
 
+    if len(phones) > 1 and successful_pair_count == 0:
+        examples = dict(list(skipped_pairs.items())[:TOP_K_DEBUG])
+        raise RuntimeError(
+            "No Zimtohrli off-diagonal phone-pair distances could be computed. "
+            f"Example failures: {examples}"
+        )
+
     payload = {
-        "schema_version": "1.0-cmvn-phone-pairwise",
+        "schema_version": "1.0-perceptual-phone-pairwise",
         "inventory_root": str(inventory_root),
-        "distance_metric": "cmvn_mfcc_dtw",
+        "distance_metric": "zimtohrli_pyohrli",
         "distance_scale": "normalized_0_1",
         "phones": phones,
         "phone_assets": {phone: str(phone_assets[phone]) for phone in phones},
         "raw_distances": raw_distances,
-        "skipped": skipped,
+        "skipped_pairs": skipped_pairs,
+        "successful_pair_count": successful_pair_count,
+        "subprocess_isolation": True,
     }
     return normalize_pairwise_payload(payload)
 
 
-def load_or_create_cmvn_pairwise_distances(
+def load_or_create_perceptual_pairwise_distances(
     inventory_root: Path,
     *,
     rebuild: bool = False,
 ) -> dict[str, Any]:
     """
-    Load the pairwise CMVN auditory-distance cache, creating it if missing.
+    Load the pairwise perceptual distance cache, creating it if missing.
 
-    The raw pairwise distances are computed from comparisons among cleaned
-    phoneme assets in phone_inventory_root. If the cache already exists, raw
-    distances are reused and normalized by the raw maximum pairwise distance.
+    The raw pairwise distances are computed from Zimtohrli comparisons among
+    cleaned phoneme assets in phone_inventory_root. If the cache already exists,
+    raw distances are reused and normalized by the raw maximum pairwise distance.
     """
-    cache_path = cmvn_pairwise_cache_path(inventory_root)
+    cache_path = perceptual_pairwise_cache_path(inventory_root)
 
     if cache_path.is_file() and not rebuild:
         payload = json.loads(cache_path.read_text(encoding="utf-8"))
-        return normalize_pairwise_payload(payload)
+        payload = normalize_pairwise_payload(payload)
+        cached_phones = {strip_cmudict_stress(phone) for phone in payload.get("phones") or []}
+        available_phones = set(available_inventory_phone_assets(inventory_root))
+        if payload.get("distance_metric") == "zimtohrli_pyohrli" and not (available_phones - cached_phones):
+            return payload
 
-    payload = build_cmvn_pairwise_distances(inventory_root)
+    payload = build_perceptual_pairwise_distances(inventory_root)
     inventory_root.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False, default=str),
@@ -698,12 +859,12 @@ def load_or_create_cmvn_pairwise_distances(
     return payload
 
 
-def pairwise_cmvn_distance(
+def pairwise_perceptual_distance(
     pairwise: dict[str, Any],
     source_phone: str,
     generated_phone: str,
 ) -> float | None:
-    """Return normalized [0,1] auditory distance for source -> generated."""
+    """Return normalized [0,1] perceptual distance for source -> generated."""
     source = strip_cmudict_stress(source_phone)
     generated = strip_cmudict_stress(generated_phone)
     value = ((pairwise.get("distances") or {}).get(source) or {}).get(generated)
@@ -749,6 +910,11 @@ def make_per_phoneme_asset(
 ) -> dict[str, Any]:
     key = output_distance_key(requested_distances)
     render_text = " ".join(generated)
+    grapheme = candidate_grapheme_for_generated_phones(
+        word=word,
+        canonical=canonical,
+        generated=generated,
+    )
 
     return {
         "schema_version": "1.0-per-phoneme-grid",
@@ -759,12 +925,14 @@ def make_per_phoneme_asset(
         "generation_mode": "per_phoneme_grid",
         "audio_source": "phone_stitch",
         "candidate_text": render_text,
+        "candidate_grapheme": grapheme,
+        "grapheme": grapheme,
         "render_text": render_text,
         "phones": list(generated),
         "canonical_phones": list(canonical),
         "distance_tuple": [float(value) for value in requested_distances],
         "actual_phone_distances": list(actual_distances),
-        "actual_phone_distance_metric": "cmvn_mfcc_dtw_normalized",
+        "actual_phone_distance_metric": "zimtohrli_pyohrli_normalized",
         "distance_key": key,
         "raw_distance_key": distance_key(requested_distances),
         "operations": list(operations),
@@ -858,12 +1026,12 @@ def pregenerate_word_assets(
             )
         )
 
-    cmvn_signature = pairwise_signature(pairwise_distances)
+    perceptual_signature = pairwise_signature(pairwise_distances)
     payload = {
         "schema_version": "1.0-per-phoneme-grid",
         "generation_mode": "per_phoneme_grid",
         "audio_source": "phone_stitch",
-        "distance_metric": "cmvn_mfcc_dtw",
+        "distance_metric": "zimtohrli_pyohrli",
         "word": word,
         "voice_mode": voice_mode,
         "canonical_phones": canonical,
@@ -873,8 +1041,8 @@ def pregenerate_word_assets(
         "max_phone_rank": int(max_phone_rank),
         "asset_count": len(assets),
         "phone_inventory_root": str(phone_inventory_root),
-        "cmvn_pairwise_distances_path": str(cmvn_pairwise_cache_path(phone_inventory_root)),
-        "cmvn_pairwise_signature": cmvn_signature,
+        "perceptual_pairwise_distances_path": str(perceptual_pairwise_cache_path(phone_inventory_root)),
+        "perceptual_pairwise_signature": perceptual_signature,
         "skipped_missing_phone_count": skipped_missing_phone,
         "skipped_missing_phone_examples": skipped_missing_phone_details,
         "stitched_count": stitched_count,
@@ -895,15 +1063,25 @@ def pregenerate_word_assets(
         encoding="utf-8",
     )
 
+    grapheme_lookup = {
+        str(asset["distance_key"]): str(asset.get("candidate_grapheme") or asset.get("grapheme") or "")
+        for asset in assets
+    }
+    grapheme_json_path = per_phoneme_grapheme_json_path(output_root, voice_mode, word)
+    grapheme_json_path.write_text(
+        json.dumps(grapheme_lookup, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
+
     return payload
 
 def pregenerate_assets(args: argparse.Namespace) -> list[dict[str, Any]]:
     values = granularity_values(args.granularity)
     output_root = Path(args.output_root)
     phone_inventory_root = Path(args.phone_inventory_root)
-    pairwise_distances = load_or_create_cmvn_pairwise_distances(
+    pairwise_distances = load_or_create_perceptual_pairwise_distances(
         phone_inventory_root,
-        rebuild=bool(args.rebuild_cmvn_pairwise),
+        rebuild=bool(args.rebuild_perceptual_pairwise),
     )
     expected_pairwise_signature = pairwise_signature(pairwise_distances)
     expected_max_phone_rank = int(args.max_phone_rank)
@@ -914,11 +1092,11 @@ def pregenerate_assets(args: argparse.Namespace) -> list[dict[str, Any]]:
         for word in parse_words(args.words):
             library_path = per_phoneme_library_json_path(output_root, voice_mode, word)
             expected_canonical = resolve_preview_phones(word)
-            force_overwrite = bool(args.overwrite or args.rebuild_cmvn_pairwise)
+            force_overwrite = bool(args.overwrite or args.rebuild_perceptual_pairwise)
             try:
                 assets, payload = load_per_phoneme_assets(library_path)
                 force_overwrite = force_overwrite or library_canonical_phones(payload) != expected_canonical
-                force_overwrite = force_overwrite or payload.get("cmvn_pairwise_signature") != expected_pairwise_signature
+                force_overwrite = force_overwrite or payload.get("perceptual_pairwise_signature") != expected_pairwise_signature
                 force_overwrite = force_overwrite or int(payload.get("max_phone_rank") or 0) != expected_max_phone_rank
                 for asset in assets:
                     phones = list(asset.get("phones") or [])
@@ -981,8 +1159,14 @@ def per_phoneme_library_needs_generation(
     except Exception:
         return True
 
+    word = str(payload.get("word") or path.parent.name).strip().lower()
+    voice_mode = str(payload.get("voice_mode") or path.parent.parent.name).strip()
+    grapheme_path = per_phoneme_grapheme_json_path(path.parent.parent, voice_mode, word)
+    if not grapheme_path.is_file():
+        return True
+
     if expected_pairwise_signature is not None:
-        if payload.get("cmvn_pairwise_signature") != expected_pairwise_signature:
+        if payload.get("perceptual_pairwise_signature") != expected_pairwise_signature:
             return True
     if expected_max_phone_rank is not None and int(payload.get("max_phone_rank") or 0) != int(expected_max_phone_rank):
         return True
@@ -994,6 +1178,9 @@ def per_phoneme_library_needs_generation(
             return True
 
         for asset in assets:
+            if not asset.get("candidate_grapheme") and not asset.get("grapheme"):
+                return True
+
             distance_tuple = asset.get("distance_tuple")
             audio_path = asset_audio_path(asset)
             if isinstance(distance_tuple, list) and audio_path:
@@ -1019,12 +1206,12 @@ def ensure_word_library(
     expected_canonical = resolve_preview_phones(word)
     expected_max_phone_rank = int(args.max_phone_rank)
     phone_inventory_root = Path(args.phone_inventory_root)
-    pairwise_distances = load_or_create_cmvn_pairwise_distances(
+    pairwise_distances = load_or_create_perceptual_pairwise_distances(
         phone_inventory_root,
-        rebuild=bool(args.rebuild_cmvn_pairwise),
+        rebuild=bool(args.rebuild_perceptual_pairwise),
     )
     expected_pairwise_signature = pairwise_signature(pairwise_distances)
-    force_overwrite = bool(args.overwrite or args.rebuild_cmvn_pairwise)
+    force_overwrite = bool(args.overwrite or args.rebuild_perceptual_pairwise)
 
     if not per_phoneme_library_needs_generation(
         library_path,
@@ -1038,7 +1225,7 @@ def ensure_word_library(
     try:
         assets, payload = load_per_phoneme_assets(library_path)
         force_overwrite = force_overwrite or library_canonical_phones(payload) != expected_canonical
-        force_overwrite = force_overwrite or payload.get("cmvn_pairwise_signature") != expected_pairwise_signature
+        force_overwrite = force_overwrite or payload.get("perceptual_pairwise_signature") != expected_pairwise_signature
         force_overwrite = force_overwrite or int(payload.get("max_phone_rank") or 0) != expected_max_phone_rank
         for asset in assets:
             phones = list(asset.get("phones") or [])
@@ -1196,13 +1383,13 @@ def preview_rows(
     words: tuple[str, ...] = PREVIEW_WORDS,
     distance_signal: list[float] | None = None,
     phone_inventory_root: Path = Path(DEFAULT_PHONE_INVENTORY_ROOT),
-    rebuild_cmvn_pairwise: bool = False,
+    rebuild_perceptual_pairwise: bool = False,
     max_phone_rank: int = DEFAULT_MAX_PHONE_RANK,
 ) -> list[dict[str, Any]]:
     signal = distance_signal if distance_signal is not None else [0.1, 0.3, 0.6, 0.9]
-    pairwise_distances = load_or_create_cmvn_pairwise_distances(
+    pairwise_distances = load_or_create_perceptual_pairwise_distances(
         phone_inventory_root,
-        rebuild=rebuild_cmvn_pairwise,
+        rebuild=rebuild_perceptual_pairwise,
     )
     rows: list[dict[str, Any]] = []
 
@@ -1223,14 +1410,14 @@ def preview_rows(
                 "preview_targets": targets,
                 "generated_phones": generated,
                 "operations": operations,
-                "distance_metric": "cmvn_mfcc_dtw",
+                "distance_metric": "zimtohrli_pyohrli",
                 "max_phone_rank": int(max_phone_rank),
                 "phoneme_map": [
                     {
                         "source": source,
                         "generated": gen,
                         "target": targets[idx],
-                        "cmvn_distance": distances[idx],
+                        "perceptual_distance": distances[idx],
                     }
                     for idx, (source, gen) in enumerate(zip(canonical, generated))
                 ],
@@ -1311,9 +1498,16 @@ def main() -> None:
     )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument(
-        "--rebuild-cmvn-pairwise",
+        "--rebuild-perceptual-pairwise",
+        dest="rebuild_perceptual_pairwise",
         action="store_true",
-        help="Rebuild <phone-inventory-root>/cmvn_pairwise_distances.json.",
+        help="Rebuild <phone-inventory-root>/perceptual_pairwise_distances.json.",
+    )
+    parser.add_argument(
+        "--rebuild-cmvn-pairwise",
+        dest="rebuild_perceptual_pairwise",
+        action="store_true",
+        help=argparse.SUPPRESS,
     )
 
 
@@ -1356,7 +1550,7 @@ def main() -> None:
         rows = preview_rows(
             distance_signal=parse_distance_signal(args.preview_signal or "0.1,0.3,0.6,0.9"),
             phone_inventory_root=Path(args.phone_inventory_root),
-            rebuild_cmvn_pairwise=bool(args.rebuild_cmvn_pairwise),
+            rebuild_perceptual_pairwise=bool(args.rebuild_perceptual_pairwise),
             max_phone_rank=int(args.max_phone_rank),
         )
 
@@ -1377,7 +1571,7 @@ def main() -> None:
             "payload_count": len(payloads),
             "asset_count": sum(int(payload["asset_count"]) for payload in payloads),
             "audio_source": "phone_stitch",
-            "cmvn_pairwise_distances_path": str(cmvn_pairwise_cache_path(Path(args.phone_inventory_root))),
+            "perceptual_pairwise_distances_path": str(perceptual_pairwise_cache_path(Path(args.phone_inventory_root))),
             "max_phone_rank": int(args.max_phone_rank),
             "skipped_missing_phone_count": sum(
                 int(payload.get("skipped_missing_phone_count") or 0)
@@ -1434,7 +1628,7 @@ def main() -> None:
 
     result["output_root"] = args.output_root
     result["granularity"] = args.granularity
-    result["cmvn_pairwise_distances_path"] = str(cmvn_pairwise_cache_path(Path(args.phone_inventory_root)))
+    result["perceptual_pairwise_distances_path"] = str(perceptual_pairwise_cache_path(Path(args.phone_inventory_root)))
     result["max_phone_rank"] = int(args.max_phone_rank)
 
     payload = json.dumps(result, indent=2, ensure_ascii=False, default=str)

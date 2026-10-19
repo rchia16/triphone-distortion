@@ -1,0 +1,223 @@
+# bath
+
+0000	0.000000	bath -> bath	/bæθ/	[B AE TH]	insertions=-
+0001	0.000579	bath -> badh	/bæð/	[B AE DH]	insertions=-
+0002	0.000868	bath -> bahth	/bɑθ/	[B AA TH]	insertions=-
+0003	0.001157	bath -> bas	/bæs/	[B AE S]	insertions=-
+0004	0.001157	bath -> bat	/bæt/	[B AE T]	insertions=-
+0005	0.001157	bath -> behth	/bɛθ/	[B EH TH]	insertions=-
+0006	0.001157	bath -> buhth	/bʌθ/	[B AH TH]	insertions=-
+0007	0.001447	bath -> bahdh	/bɑð/	[B AA DH]	insertions=-
+0008	0.001736	bath -> behdh	/bɛð/	[B EH DH]	insertions=-
+0009	0.001736	bath -> buhdh	/bʌð/	[B AH DH]	insertions=-
+0010	0.002025	bath -> bahs	/bɑs/	[B AA S]	insertions=-
+0011	0.002025	bath -> baht	/bɑt/	[B AA T]	insertions=-
+0012	0.002025	bath -> baf	/bæf/	[B AE F]	insertions=-
+0013	0.002315	bath -> behs	/bɛs/	[B EH S]	insertions=-
+0014	0.002315	bath -> beht	/bɛt/	[B EH T]	insertions=-
+0015	0.002315	bath -> buhs	/bʌs/	[B AH S]	insertions=-
+0016	0.002315	bath -> buht	/bʌt/	[B AH T]	insertions=-
+0017	0.002894	bath -> bahf	/bɑf/	[B AA F]	insertions=-
+0018	0.003183	bath -> behf	/bɛf/	[B EH F]	insertions=-
+0019	0.003183	bath -> buhf	/bʌf/	[B AH F]	insertions=-
+0020	0.014757	bath -> berth	/bəɹθ/	[B ER TH]	insertions=-
+0021	0.015336	bath -> berdh	/bəɹð/	[B ER DH]	insertions=-
+0022	0.015914	bath -> bers	/bəɹs/	[B ER S]	insertions=-
+0023	0.015914	bath -> bert	/bəɹt/	[B ER T]	insertions=-
+0024	0.016782	bath -> berf	/bəɹf/	[B ER F]	insertions=-
+
+# stop
+
+0000	0.000000	stop -> stop	/stɑp/	[S T AA P]	insertions=-
+0001	0.000434	stop -> sdahp	/sdɑp/	[S D AA P]	insertions=-
+0002	0.000434	stop -> stahb	/stɑb/	[S T AA B]	insertions=-
+0003	0.000651	stop -> stap	/stæp/	[S T AE P]	insertions=-
+0004	0.000651	stop -> stuhp	/stʌp/	[S T AH P]	insertions=-
+0005	0.000868	stop -> sdahb	/sdɑb/	[S D AA B]	insertions=-
+0006	0.000868	stop -> ssahp	/ssɑp/	[S S AA P]	insertions=-
+0007	0.000868	stop -> stahf	/stɑf/	[S T AA F]	insertions=-
+0008	0.000868	stop -> sthahp	/sθɑp/	[S TH AA P]	insertions=-
+0009	0.001085	stop -> sdap	/sdæp/	[S D AE P]	insertions=-
+0010	0.001085	stop -> sduhp	/sdʌp/	[S D AH P]	insertions=-
+0011	0.001085	stop -> stab	/stæb/	[S T AE B]	insertions=-
+0012	0.001085	stop -> stuhb	/stʌb/	[S T AH B]	insertions=-
+0013	0.001302	stop -> sdahf	/sdɑf/	[S D AA F]	insertions=-
+0014	0.001302	stop -> ssahb	/ssɑb/	[S S AA B]	insertions=-
+0015	0.001302	stop -> stahm	/stɑm/	[S T AA M]	insertions=-
+0016	0.001302	stop -> sthahb	/sθɑb/	[S TH AA B]	insertions=-
+0017	0.001519	stop -> sdab	/sdæb/	[S D AE B]	insertions=-
+0018	0.001519	stop -> sduhb	/sdʌb/	[S D AH B]	insertions=-
+0019	0.001519	stop -> ssap	/ssæp/	[S S AE P]	insertions=-
+0020	0.001519	stop -> ssuhp	/ssʌp/	[S S AH P]	insertions=-
+0021	0.001519	stop -> staf	/stæf/	[S T AE F]	insertions=-
+0022	0.001519	stop -> sthap	/sθæp/	[S TH AE P]	insertions=-
+0023	0.001519	stop -> sthuhp	/sθʌp/	[S TH AH P]	insertions=-
+0024	0.001519	stop -> stuhf	/stʌf/	[S T AH F]	insertions=-
+0025	0.001519	stop -> stawp	/stɔp/	[S T AO P]	insertions=-
+0026	0.001736	stop -> sdahm	/sdɑm/	[S D AA M]	insertions=-
+0027	0.001736	stop -> ssahf	/ssɑf/	[S S AA F]	insertions=-
+0028	0.001736	stop -> sthahf	/sθɑf/	[S TH AA F]	insertions=-
+0029	0.001953	stop -> ssab	/ssæb/	[S S AE B]	insertions=-
+0030	0.001953	stop -> ssuhb	/ssʌb/	[S S AH B]	insertions=-
+0031	0.001953	stop -> sthab	/sθæb/	[S TH AE B]	insertions=-
+0032	0.001953	stop -> sthuhb	/sθʌb/	[S TH AH B]	insertions=-
+0033	0.001953	stop -> sdaf	/sdæf/	[S D AE F]	insertions=-
+0034	0.001953	stop -> sdawp	/sdɔp/	[S D AO P]	insertions=-
+0035	0.001953	stop -> sduhf	/sdʌf/	[S D AH F]	insertions=-
+0036	0.001953	stop -> stam	/stæm/	[S T AE M]	insertions=-
+0037	0.001953	stop -> stawb	/stɔb/	[S T AO B]	insertions=-
+0038	0.001953	stop -> stuhm	/stʌm/	[S T AH M]	insertions=-
+0039	0.002170	stop -> ssahm	/ssɑm/	[S S AA M]	insertions=-
+0040	0.002170	stop -> sthahm	/sθɑm/	[S TH AA M]	insertions=-
+0041	0.002387	stop -> sdam	/sdæm/	[S D AE M]	insertions=-
+0042	0.002387	stop -> sdawb	/sdɔb/	[S D AO B]	insertions=-
+0043	0.002387	stop -> sduhm	/sdʌm/	[S D AH M]	insertions=-
+0044	0.002387	stop -> ssaf	/ssæf/	[S S AE F]	insertions=-
+0045	0.002387	stop -> ssuhf	/ssʌf/	[S S AH F]	insertions=-
+0046	0.002387	stop -> sthaf	/sθæf/	[S TH AE F]	insertions=-
+0047	0.002387	stop -> sthuhf	/sθʌf/	[S TH AH F]	insertions=-
+0048	0.002387	stop -> ssawp	/ssɔp/	[S S AO P]	insertions=-
+0049	0.002387	stop -> stawf	/stɔf/	[S T AO F]	insertions=-
+
+# go
+
+0000	0.000000	go -> go	/ɡɔʊ/	[G OW]	insertions=-
+0001	0.004774	go -> ger	/ɡəɹ/	[G ER]	insertions=-
+0002	0.019097	go -> gaw	/ɡɔ/	[G AO]	insertions=-
+0003	0.020833	go -> goo	/ɡu/	[G UW]	insertions=-
+0004	0.020833	go -> guh	/ɡʌ/	[G AH]	insertions=-
+
+# yes
+
+0000	0.000000	yes -> yes	/jɛs/	[Y EH S]	insertions=-
+0001	0.000579	yes -> yehz	/jɛz/	[Y EH Z]	insertions=-
+0002	0.001157	yes -> yas	/jæs/	[Y AE S]	insertions=-
+0003	0.001157	yes -> yehsh	/jɛʃ/	[Y EH SH]	insertions=-
+0004	0.001157	yes -> yeht	/jɛt/	[Y EH T]	insertions=-
+0005	0.001157	yes -> yehth	/jɛθ/	[Y EH TH]	insertions=-
+0006	0.001157	yes -> yuhs	/jʌs/	[Y AH S]	insertions=-
+0007	0.001736	yes -> yaz	/jæz/	[Y AE Z]	insertions=-
+0008	0.001736	yes -> yuhz	/jʌz/	[Y AH Z]	insertions=-
+0009	0.002315	yes -> yash	/jæʃ/	[Y AE SH]	insertions=-
+0010	0.002315	yes -> yat	/jæt/	[Y AE T]	insertions=-
+0011	0.002315	yes -> yath	/jæθ/	[Y AE TH]	insertions=-
+0012	0.002315	yes -> yuhsh	/jʌʃ/	[Y AH SH]	insertions=-
+0013	0.002315	yes -> yuht	/jʌt/	[Y AH T]	insertions=-
+0014	0.002315	yes -> yuhth	/jʌθ/	[Y AH TH]	insertions=-
+0015	0.013600	yes -> yers	/jəɹs/	[Y ER S]	insertions=-
+0016	0.014178	yes -> yerz	/jəɹz/	[Y ER Z]	insertions=-
+0017	0.014757	yes -> yersh	/jəɹʃ/	[Y ER SH]	insertions=-
+0018	0.014757	yes -> yert	/jəɹt/	[Y ER T]	insertions=-
+0019	0.014757	yes -> yerth	/jəɹθ/	[Y ER TH]	insertions=-
+
+# no
+
+0000	0.000000	no -> no	/nɔʊ/	[N OW]	insertions=-
+0001	0.004774	no -> ner	/nəɹ/	[N ER]	insertions=-
+0002	0.019097	no -> naw	/nɔ/	[N AO]	insertions=-
+0003	0.020833	no -> noo	/nu/	[N UW]	insertions=-
+0004	0.020833	no -> nuh	/nʌ/	[N AH]	insertions=-
+
+# pain
+
+0000	0.000000	pain -> pain	/peɪn/	[P EY N]	insertions=-
+0001	0.001157	pain -> payd	/peɪd/	[P EY D]	insertions=-
+0002	0.001447	pain -> paym	/peɪm/	[P EY M]	insertions=-
+0003	0.001736	pain -> payt	/peɪt/	[P EY T]	insertions=-
+0004	0.002604	pain -> payng	/peɪŋ/	[P EY NG]	insertions=-
+0005	0.003762	pain -> pern	/pəɹn/	[P ER N]	insertions=-
+0006	0.004919	pain -> perd	/pəɹd/	[P ER D]	insertions=-
+0007	0.005208	pain -> perm	/pəɹm/	[P ER M]	insertions=-
+0008	0.005498	pain -> pert	/pəɹt/	[P ER T]	insertions=-
+0009	0.006366	pain -> perng	/pəɹŋ/	[P ER NG]	insertions=-
+0010	0.013310	pain -> pan	/pæn/	[P AE N]	insertions=-
+0011	0.013310	pain -> pehn	/pɛn/	[P EH N]	insertions=-
+0012	0.013310	pain -> puhn	/pʌn/	[P AH N]	insertions=-
+0013	0.014468	pain -> pad	/pæd/	[P AE D]	insertions=-
+0014	0.014468	pain -> pehd	/pɛd/	[P EH D]	insertions=-
+0015	0.014468	pain -> puhd	/pʌd/	[P AH D]	insertions=-
+0016	0.014757	pain -> pam	/pæm/	[P AE M]	insertions=-
+0017	0.014757	pain -> pehm	/pɛm/	[P EH M]	insertions=-
+0018	0.014757	pain -> puhm	/pʌm/	[P AH M]	insertions=-
+0019	0.015046	pain -> pat	/pæt/	[P AE T]	insertions=-
+0020	0.015046	pain -> peht	/pɛt/	[P EH T]	insertions=-
+0021	0.015046	pain -> puht	/pʌt/	[P AH T]	insertions=-
+0022	0.015914	pain -> pang	/pæŋ/	[P AE NG]	insertions=-
+0023	0.015914	pain -> pehng	/pɛŋ/	[P EH NG]	insertions=-
+0024	0.015914	pain -> puhng	/pʌŋ/	[P AH NG]	insertions=-
+
+# help
+
+0000	0.000000	help -> help	/hɛlp/	[HH EH L P]	insertions=-
+0001	0.000434	help -> hehlb	/hɛlb/	[HH EH L B]	insertions=-
+0002	0.000868	help -> halp	/hælp/	[HH AE L P]	insertions=-
+0003	0.000868	help -> hehlf	/hɛlf/	[HH EH L F]	insertions=-
+0004	0.000868	help -> huhlp	/hʌlp/	[HH AH L P]	insertions=-
+0005	0.001302	help -> halb	/hælb/	[HH AE L B]	insertions=-
+0006	0.001302	help -> hehlm	/hɛlm/	[HH EH L M]	insertions=-
+0007	0.001302	help -> huhlb	/hʌlb/	[HH AH L B]	insertions=-
+0008	0.001736	help -> half	/hælf/	[HH AE L F]	insertions=-
+0009	0.001736	help -> hehrp	/hɛɹp/	[HH EH R P]	insertions=-
+0010	0.001736	help -> huhlf	/hʌlf/	[HH AH L F]	insertions=-
+0011	0.002170	help -> halm	/hælm/	[HH AE L M]	insertions=-
+0012	0.002170	help -> hehrb	/hɛɹb/	[HH EH R B]	insertions=-
+0013	0.002170	help -> huhlm	/hʌlm/	[HH AH L M]	insertions=-
+0014	0.002387	help -> hehyp	/hɛjp/	[HH EH Y P]	insertions=-
+0015	0.002604	help -> harp	/hæɹp/	[HH AE R P]	insertions=-
+0016	0.002604	help -> hehrf	/hɛɹf/	[HH EH R F]	insertions=-
+0017	0.002604	help -> huhrp	/hʌɹp/	[HH AH R P]	insertions=-
+0018	0.002821	help -> hehyb	/hɛjb/	[HH EH Y B]	insertions=-
+0019	0.003038	help -> hehrm	/hɛɹm/	[HH EH R M]	insertions=-
+0020	0.003038	help -> harb	/hæɹb/	[HH AE R B]	insertions=-
+0021	0.003038	help -> huhrb	/hʌɹb/	[HH AH R B]	insertions=-
+0022	0.003255	help -> hayp	/hæjp/	[HH AE Y P]	insertions=-
+0023	0.003255	help -> hehyf	/hɛjf/	[HH EH Y F]	insertions=-
+0024	0.003255	help -> huhyp	/hʌjp/	[HH AH Y P]	insertions=-
+0025	0.003472	help -> harf	/hæɹf/	[HH AE R F]	insertions=-
+0026	0.003472	help -> huhrf	/hʌɹf/	[HH AH R F]	insertions=-
+0027	0.003689	help -> hehym	/hɛjm/	[HH EH Y M]	insertions=-
+0028	0.003689	help -> hayb	/hæjb/	[HH AE Y B]	insertions=-
+0029	0.003689	help -> hehwp	/hɛwp/	[HH EH W P]	insertions=-
+0030	0.003689	help -> huhyb	/hʌjb/	[HH AH Y B]	insertions=-
+0031	0.003906	help -> harm	/hæɹm/	[HH AE R M]	insertions=-
+0032	0.003906	help -> huhrm	/hʌɹm/	[HH AH R M]	insertions=-
+0033	0.004123	help -> hayf	/hæjf/	[HH AE Y F]	insertions=-
+0034	0.004123	help -> hehwb	/hɛwb/	[HH EH W B]	insertions=-
+0035	0.004123	help -> huhyf	/hʌjf/	[HH AH Y F]	insertions=-
+0036	0.004557	help -> hawp	/hæwp/	[HH AE W P]	insertions=-
+0037	0.004557	help -> haym	/hæjm/	[HH AE Y M]	insertions=-
+0038	0.004557	help -> hehwf	/hɛwf/	[HH EH W F]	insertions=-
+0039	0.004557	help -> huhwp	/hʌwp/	[HH AH W P]	insertions=-
+0040	0.004557	help -> huhym	/hʌjm/	[HH AH Y M]	insertions=-
+0041	0.004991	help -> hawb	/hæwb/	[HH AE W B]	insertions=-
+0042	0.004991	help -> hehwm	/hɛwm/	[HH EH W M]	insertions=-
+0043	0.004991	help -> huhwb	/hʌwb/	[HH AH W B]	insertions=-
+0044	0.005425	help -> hawf	/hæwf/	[HH AE W F]	insertions=-
+0045	0.005425	help -> huhwf	/hʌwf/	[HH AH W F]	insertions=-
+0046	0.005859	help -> hawm	/hæwm/	[HH AE W M]	insertions=-
+0047	0.005859	help -> huhwm	/hʌwm/	[HH AH W M]	insertions=-
+0048	0.007639	help -> hehluhp	/hɛləp/	[HH EH L AX P]	insertions=liquid_boundary_schwa_smoothing
+0049	0.007639	help -> hehuhlp	/hɛəlp/	[HH EH AX L P]	insertions=liquid_boundary_schwa_smoothing
+
+# food
+
+0000	0.000000	food -> food	/fud/	[F UW D]	insertions=-
+0001	0.000579	food -> foot	/fut/	[F UW T]	insertions=-
+0002	0.001157	food -> foodh	/fuð/	[F UW DH]	insertions=-
+0003	0.001157	food -> fooz	/fuz/	[F UW Z]	insertions=-
+0004	0.001157	food -> fuhd	/fʊd/	[F UH D]	insertions=-
+0005	0.001736	food -> fawd	/fɔd/	[F AO D]	insertions=-
+0006	0.001736	food -> fuhd	/fʌd/	[F AH D]	insertions=-
+0007	0.001736	food -> fuht	/fʊt/	[F UH T]	insertions=-
+0008	0.002315	food -> fawt	/fɔt/	[F AO T]	insertions=-
+0009	0.002315	food -> fuhdh	/fʊð/	[F UH DH]	insertions=-
+0010	0.002315	food -> fuht	/fʌt/	[F AH T]	insertions=-
+0011	0.002315	food -> fuhz	/fʊz/	[F UH Z]	insertions=-
+0012	0.002894	food -> fawdh	/fɔð/	[F AO DH]	insertions=-
+0013	0.002894	food -> fawz	/fɔz/	[F AO Z]	insertions=-
+0014	0.002894	food -> fuhdh	/fʌð/	[F AH DH]	insertions=-
+0015	0.002894	food -> fuhz	/fʌz/	[F AH Z]	insertions=-
+0016	0.015336	food -> ferd	/fəɹd/	[F ER D]	insertions=-
+0017	0.015914	food -> fert	/fəɹt/	[F ER T]	insertions=-
+0018	0.016493	food -> ferdh	/fəɹð/	[F ER DH]	insertions=-
+0019	0.016493	food -> ferz	/fəɹz/	[F ER Z]	insertions=-

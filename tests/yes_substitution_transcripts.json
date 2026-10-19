@@ -1,0 +1,245 @@
+[
+  {
+    "distance": "0.0_0.0_0.0",
+    "word": "yes",
+    "new_word": "yes",
+    "path": {
+      "man": "man/yes/yes_en-au-williamneural.wav",
+      "woman": "woman/yes/yes_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.0_0.5",
+    "word": "yes",
+    "new_word": "yez",
+    "path": {
+      "man": "man/yes/yez_en-au-williamneural.wav",
+      "woman": "woman/yes/yez_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.0_1.0",
+    "word": "yes",
+    "new_word": "yeth",
+    "path": {
+      "man": "man/yes/yeth_en-au-williamneural.wav",
+      "woman": "woman/yes/yeth_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_0.0",
+    "word": "yes",
+    "new_word": "yays",
+    "path": {
+      "man": "man/yes/yays_en-au-williamneural.wav",
+      "woman": "woman/yes/yays_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_0.5",
+    "word": "yes",
+    "new_word": "yayz",
+    "path": {
+      "man": "man/yes/yayz_en-au-williamneural.wav",
+      "woman": "woman/yes/yayz_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_0.5_1.0",
+    "word": "yes",
+    "new_word": "yayth",
+    "path": {
+      "man": "man/yes/yayth_en-au-williamneural.wav",
+      "woman": "woman/yes/yayth_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_0.0",
+    "word": "yes",
+    "new_word": "yas",
+    "path": {
+      "man": "man/yes/yas_en-au-williamneural.wav",
+      "woman": "woman/yes/yas_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_0.5",
+    "word": "yes",
+    "new_word": "yaz",
+    "path": {
+      "man": "man/yes/yaz_en-au-williamneural.wav",
+      "woman": "woman/yes/yaz_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.0_1.0_1.0",
+    "word": "yes",
+    "new_word": "yath",
+    "path": {
+      "man": "man/yes/yath_en-au-williamneural.wav",
+      "woman": "woman/yes/yath_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_0.0",
+    "word": "yes",
+    "new_word": "wehs",
+    "path": {
+      "man": "man/yes/wehs_en-au-williamneural.wav",
+      "woman": "woman/yes/wehs_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_0.5",
+    "word": "yes",
+    "new_word": "wehz",
+    "path": {
+      "man": "man/yes/wehz_en-au-williamneural.wav",
+      "woman": "woman/yes/wehz_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.0_1.0",
+    "word": "yes",
+    "new_word": "wehth",
+    "path": {
+      "man": "man/yes/wehth_en-au-williamneural.wav",
+      "woman": "woman/yes/wehth_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_0.0",
+    "word": "yes",
+    "new_word": "ways",
+    "path": {
+      "man": "man/yes/ways_en-au-williamneural.wav",
+      "woman": "woman/yes/ways_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_0.5",
+    "word": "yes",
+    "new_word": "wayz",
+    "path": {
+      "man": "man/yes/wayz_en-au-williamneural.wav",
+      "woman": "woman/yes/wayz_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_0.5_1.0",
+    "word": "yes",
+    "new_word": "wayth",
+    "path": {
+      "man": "man/yes/wayth_en-au-williamneural.wav",
+      "woman": "woman/yes/wayth_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_0.0",
+    "word": "yes",
+    "new_word": "was",
+    "path": {
+      "man": "man/yes/was_en-au-williamneural.wav",
+      "woman": "woman/yes/was_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_0.5",
+    "word": "yes",
+    "new_word": "waz",
+    "path": {
+      "man": "man/yes/waz_en-au-williamneural.wav",
+      "woman": "woman/yes/waz_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "0.5_1.0_1.0",
+    "word": "yes",
+    "new_word": "wath",
+    "path": {
+      "man": "man/yes/wath_en-au-williamneural.wav",
+      "woman": "woman/yes/wath_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_0.0",
+    "word": "yes",
+    "new_word": "rehs",
+    "path": {
+      "man": "man/yes/rehs_en-au-williamneural.wav",
+      "woman": "woman/yes/rehs_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_0.5",
+    "word": "yes",
+    "new_word": "rehz",
+    "path": {
+      "man": "man/yes/rehz_en-au-williamneural.wav",
+      "woman": "woman/yes/rehz_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.0_1.0",
+    "word": "yes",
+    "new_word": "rehth",
+    "path": {
+      "man": "man/yes/rehth_en-au-williamneural.wav",
+      "woman": "woman/yes/rehth_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_0.0",
+    "word": "yes",
+    "new_word": "rays",
+    "path": {
+      "man": "man/yes/rays_en-au-williamneural.wav",
+      "woman": "woman/yes/rays_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_0.5",
+    "word": "yes",
+    "new_word": "rayz",
+    "path": {
+      "man": "man/yes/rayz_en-au-williamneural.wav",
+      "woman": "woman/yes/rayz_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_0.5_1.0",
+    "word": "yes",
+    "new_word": "rayth",
+    "path": {
+      "man": "man/yes/rayth_en-au-williamneural.wav",
+      "woman": "woman/yes/rayth_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_0.0",
+    "word": "yes",
+    "new_word": "ras",
+    "path": {
+      "man": "man/yes/ras_en-au-williamneural.wav",
+      "woman": "woman/yes/ras_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_0.5",
+    "word": "yes",
+    "new_word": "raz",
+    "path": {
+      "man": "man/yes/raz_en-au-williamneural.wav",
+      "woman": "woman/yes/raz_en-au-natashaneural.wav"
+    }
+  },
+  {
+    "distance": "1.0_1.0_1.0",
+    "word": "yes",
+    "new_word": "rath",
+    "path": {
+      "man": "man/yes/rath_en-au-williamneural.wav",
+      "woman": "woman/yes/rath_en-au-natashaneural.wav"
+    }
+  }
+]

@@ -4,10 +4,11 @@ import shutil
 
 # FFMPEG = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"
 
+gender = 'woman'
 # root_folder = Path("/Users/160843/Downloads/tmp")
 root_folder = Path("/data/raqchia/audio-assets/")
-input_folder = root_folder / "RayAssets" / "man" / "triphone"
-output_folder = root_folder / "RayAssets" / "man" / "triphone-slowed"
+input_folder = root_folder / "RayAssets" / gender / "triphone"
+output_folder = root_folder / "RayAssets" / gender / "triphone-slowed"
 
 tempo = 0.60  # -50% tempo = 50% speed
 
